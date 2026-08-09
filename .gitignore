@@ -1,0 +1,8 @@
+# Local browser and visual-regression artifacts
+.*-test-profile/
+_*_check.png
+
+# Operating-system files
+.DS_Store
+Thumbs.db
+Desktop.ini

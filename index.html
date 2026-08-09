@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>奇象巡展·赛博拼豆制图工具</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand-block">
+      <p class="eyebrow">ARKNIGHTS DRAW</p>
+      <div class="title-row">
+        <h1>奇象巡展·赛博拼豆制图工具</h1>
+        <span class="header-author-cluster">
+          <a class="header-author-link" data-author-dialog href="https://github.com/Hanako-777" aria-haspopup="dialog" aria-controls="authorDialog" aria-label="查看作者 Hanako 的主页">
+            <span class="header-author-by">BY</span>
+            <strong>Hanako</strong>
+            <span class="header-author-arrow" aria-hidden="true">↗</span>
+          </a>
+          <span class="header-author-prompt" aria-hidden="true">
+            <span class="header-author-hand" aria-hidden="true">👈</span>
+          </span>
+        </span>
+      </div>
+    </div>
+    <div class="top-actions">
+      <label class="button ghost file-button">载入工程<input id="projectInput" type="file" accept="application/json,.json"></label>
+      <button id="helpBtn" class="button ghost" aria-expanded="false">使用说明</button>
+    </div>
+  </header>
+
+  <main>
+    <section id="helpPanel" class="help-panel" hidden>
+      <strong>推荐流程：</strong>上传图片 → 拖动/缩放裁剪 → 选择转换方式 → 生成24×24 → 用画笔修正 → 导出图纸。可导入他人成品截图获取图纸。<br>
+      裁剪区可拖动画面，滚轮缩放；网格中左键绘制，按住拖动可连续画。工程文件只保存格子和设置，不包含原图。导出图纸后会自动保存本机历史，点击历史卡片可恢复图纸。
+    </section>
+
+    <section class="source-stage">
+      <article class="panel source-panel">
+        <div class="panel-heading">
+          <div>
+            <span class="step">01</span>
+            <h2>原图与裁剪</h2>
+          </div>
+          <span id="sourceMeta" class="meta">尚未选择图片</span>
+        </div>
+
+        <label id="dropZone" class="drop-zone">
+          <input id="imageInput" type="file" accept="image/*">
+          <span class="drop-icon">＋</span>
+          <strong>点击或拖入图片</strong>
+          <small>PNG、JPG、WEBP；也可以直接粘贴截图</small>
+        </label>
+
+        <div id="cropWrap" class="crop-wrap" hidden>
+          <canvas id="sourceCanvas" width="560" height="560" aria-label="原图裁剪预览"></canvas>
+          <div class="crop-frame" aria-hidden="true"></div>
+          <span class="crop-tip">拖动定位 · 滚轮缩放</span>
+          <button id="removeImageBtn" class="remove-image" type="button" aria-label="移除当前图片" title="移除当前图片">×</button>
+        </div>
+
+        <div class="control-grid">
+          <label class="control wide">
+            <span>裁剪缩放 <output id="zoomOut">100%</output></span>
+            <input id="zoomRange" type="range" min="100" max="400" value="100">
+          </label>
+          <button id="resetCropBtn" class="button secondary">重置位置</button>
+          <button id="fitSubjectBtn" class="button secondary" title="缩小到完整显示图片，空白区域会自动填充">完整显示</button>
+
+          <label class="control">
+            <span>转换方式</span>
+            <select id="modeSelect">
+              <option value="hybrid">均衡（推荐）</option>
+              <option value="dominant">主色优先</option>
+              <option value="average">平均色优先</option>
+            </select>
+          </label>
+          <label class="control">
+            <span>对比度 <output id="contrastOut">0</output></span>
+            <input id="contrastRange" type="range" min="-30" max="30" value="0">
+          </label>
+          <label class="control">
+            <span>饱和度 <output id="saturationOut">0</output></span>
+            <input id="saturationRange" type="range" min="-50" max="50" value="0">
+          </label>
+          <button id="generateBtn" class="button primary full" disabled>生成 24×24 初稿</button>
+        </div>
+      </article>
+    </section>
+
+    <section class="workbench-row">
+      <article class="panel editor-panel">
+        <div class="panel-heading">
+          <div>
+            <span class="step">02</span>
+            <h2>逐格修正</h2>
+          </div>
+          <span id="cellInfo" class="meta">R— C—</span>
+        </div>
+
+        <div class="toolbar" role="toolbar" aria-label="绘图工具">
+          <button class="tool active" data-tool="paint" title="画笔">画笔</button>
+          <button class="tool" data-tool="fill" title="填充相邻的同色区域">填充</button>
+          <button class="tool" data-tool="picker" title="从网格取色">取色</button>
+          <span class="toolbar-sep"></span>
+          <button id="undoBtn" class="tool" disabled>撤销</button>
+          <button id="redoBtn" class="tool" disabled>重做</button>
+          <label class="check"><input id="showNumbers" type="checkbox" checked>显示编号</label>
+          <label class="check"><input id="showGrid" type="checkbox" checked>显示网格</label>
+        </div>
+
+        <div class="editor-canvas-wrap">
+          <div class="grid-coordinate-frame">
+            <div class="coord-corner corner-tl" aria-hidden="true"></div>
+            <div class="coord-axis coord-top" aria-label="上方列坐标"></div>
+            <div class="coord-corner corner-tr" aria-hidden="true"></div>
+            <div class="coord-axis coord-left" aria-label="左侧行坐标"></div>
+            <canvas id="gridCanvas" width="768" height="768" aria-label="24乘24像素编辑网格"></canvas>
+            <div class="coord-axis coord-right" aria-label="右侧行坐标"></div>
+            <div class="coord-corner corner-bl" aria-hidden="true"></div>
+            <div class="coord-axis coord-bottom" aria-label="下方列坐标"></div>
+            <div class="coord-corner corner-br" aria-hidden="true"></div>
+          </div>
+        </div>
+
+        <div class="replace-row">
+          <label>把 <select id="replaceFrom"></select></label>
+          <span>全部替换为当前色</span>
+          <button id="replaceBtn" class="button secondary">执行替换</button>
+          <span id="selectedBadge" class="selected-badge">当前色 01</span>
+        </div>
+      </article>
+
+      <article class="panel palette-panel">
+        <div class="panel-heading">
+          <div>
+            <span class="step">03</span>
+            <h2>固定40色色板</h2>
+          </div>
+          <span class="meta">编号顺序与游戏内颜料顺序一致</span>
+        </div>
+        <div id="palette" class="palette" role="listbox" aria-label="固定40色色板"></div>
+      </article>
+    </section>
+
+    <section class="panel export-panel">
+      <div class="panel-heading">
+        <div>
+          <span class="step">04</span>
+          <h2>导出结果</h2>
+        </div>
+        <label class="name-field">文件名 <input id="fileName" value="arknights_draw" maxlength="40"></label>
+      </div>
+      <div class="export-grid">
+        <button id="exportPreviewBtn" class="export-card"><strong>PNG 预览</strong><span>24×24最近邻放大，方便查看成品</span></button>
+        <button id="exportTotalBtn" class="export-card"><strong>导出图纸</strong><span>格内编号＋完整40色图例，并加入历史</span></button>
+        <button id="saveProjectBtn" class="export-card"><strong>保存工程 JSON</strong><span>保存格子和设置，方便跨浏览器继续修改</span></button>
+      </div>
+      <div class="export-history-block">
+        <div class="export-history-heading">
+          <div>
+            <h3>导出历史</h3>
+            <p>图纸导出成功后自动保存工程快照；点击记录即可载入图纸继续修改。</p>
+          </div>
+          <div class="export-history-actions">
+            <span id="historyCount">0 份</span>
+            <button id="clearHistoryBtn" type="button" disabled>清空历史</button>
+          </div>
+        </div>
+        <div id="exportHistory" class="export-history" aria-live="polite"></div>
+      </div>
+      <p id="status" class="status" role="status">工具已就绪。上传图片开始，或直接在网格中绘制。</p>
+    </section>
+  </main>
+
+  <footer class="site-footer">奇象巡展·赛博拼豆制图工具 · by <a data-author-dialog href="https://github.com/Hanako-777" aria-haspopup="dialog" aria-controls="authorDialog">Hanako</a></footer>
+
+  <dialog id="authorDialog" class="author-dialog" aria-labelledby="authorDialogTitle">
+    <div class="author-card">
+      <button id="authorCloseBtn" class="author-close" type="button" aria-label="关闭作者信息">×</button>
+      <p class="author-kicker">CREATOR / PROFILE</p>
+      <h2 id="authorDialogTitle">Hanako</h2>
+      <div class="author-profile-links">
+        <a class="author-profile-link author-github" href="https://github.com/Hanako-777" target="_blank" rel="noopener noreferrer">
+          <span><b aria-hidden="true">GH</b> GitHub 主页</span>
+          <strong>github.com/Hanako-777 ↗</strong>
+        </a>
+        <a class="author-profile-link author-bilibili" href="https://space.bilibili.com/357662738" target="_blank" rel="noopener noreferrer">
+          <span><b aria-hidden="true">B</b> 哔哩哔哩主页</span>
+          <strong>space.bilibili.com/357662738 ↗</strong>
+        </a>
+      </div>
+      <figure class="author-game-card">
+        <img src="assets/page.jpg" alt="Hanako的明日方舟个人页面">
+        <figcaption>明日方舟个人页面</figcaption>
+      </figure>
+    </div>
+  </dialog>
+  <script src="app.js"></script>
+</body>
+</html>
