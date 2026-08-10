@@ -38,7 +38,7 @@
     exportTotalBtn: $("exportTotalBtn"), exportHistory: $("exportHistory"),
     historyCount: $("historyCount"), clearHistoryBtn: $("clearHistoryBtn"),
     authorLinks: Array.from(document.querySelectorAll("[data-author-dialog]")), authorDialog: $("authorDialog"),
-    authorCloseBtn: $("authorCloseBtn")
+    authorCloseBtn: $("authorCloseBtn"), authorFlipCard: $("authorFlipCard")
   };
 
   const state = {
@@ -527,6 +527,67 @@
     return canvas;
   }
 
+  function drawDrawingSignature(ctx, canvas) {
+    const unit = Math.min(canvas.width, canvas.height) / 1172;
+    const bySize = Math.max(15, Math.round(18 * unit));
+    const nameSize = Math.max(27, Math.round(34 * unit));
+    const gap = Math.max(7, Math.round(9 * unit));
+    const marginX = Math.max(22, Math.round(28 * unit));
+    const marginY = Math.max(19, Math.round(24 * unit));
+    ctx.save();
+    ctx.fillStyle = "#e91e83";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "alphabetic";
+    ctx.font = `700 ${bySize}px "Arial Black", "Microsoft YaHei UI", sans-serif`;
+    const byWidth = ctx.measureText("by").width;
+    ctx.font = `700 italic ${nameSize}px "Segoe Script", "Segoe Print", "Comic Sans MS", cursive`;
+    const nameWidth = ctx.measureText("Hanako").width;
+    const x = canvas.width - byWidth - gap - nameWidth - marginX;
+    const baseline = canvas.height - marginY;
+    ctx.font = `700 ${bySize}px "Arial Black", "Microsoft YaHei UI", sans-serif`;
+    ctx.fillText("by", x, baseline - Math.round(nameSize * 0.08));
+    ctx.font = `700 italic ${nameSize}px "Segoe Script", "Segoe Print", "Comic Sans MS", cursive`;
+    ctx.fillText("Hanako", x + byWidth + gap, baseline);
+    ctx.restore();
+  }
+
+  function setAuthorFlipState(flipped) {
+    el.authorFlipCard.classList.toggle("is-flipped", flipped);
+    el.authorFlipCard.setAttribute("aria-pressed", String(flipped));
+    el.authorFlipCard.setAttribute("aria-label", flipped
+      ? "当前显示明日方舟主页，点击返回小红书主页"
+      : "当前显示小红书主页，点击查看明日方舟主页");
+  }
+
+  async function flipAuthorCard() {
+    if (el.authorFlipCard.dataset.animating === "true") return;
+    const next = !el.authorFlipCard.classList.contains("is-flipped");
+    const inner = el.authorFlipCard.querySelector(".author-flip-inner");
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduceMotion || typeof inner.animate !== "function") {
+      setAuthorFlipState(next);
+      return;
+    }
+    el.authorFlipCard.dataset.animating = "true";
+    try {
+      const close = inner.animate([
+        { transform: "translateZ(0) scaleX(1)" },
+        { transform: "translateZ(0) scaleX(.015)" }
+      ], { duration: 155, easing: "cubic-bezier(.55, .06, .68, .19)", fill: "forwards" });
+      await close.finished;
+      setAuthorFlipState(next);
+      close.cancel();
+      const open = inner.animate([
+        { transform: "translateZ(0) scaleX(.015)" },
+        { transform: "translateZ(0) scaleX(1)" }
+      ], { duration: 205, easing: "cubic-bezier(.22, .61, .36, 1)", fill: "forwards" });
+      await open.finished;
+      open.cancel();
+    } finally {
+      delete el.authorFlipCard.dataset.animating;
+    }
+  }
+
   function createNumberCanvas(includeLegend) {
     const cell = 44, margin = 58;
     const board = margin * 2 + cell * GRID;
@@ -564,6 +625,7 @@
       }
     }
     if (includeLegend) drawLegend(ctx, board, 0, legendWidth, board);
+    drawDrawingSignature(ctx, canvas);
     return canvas;
   }
 
@@ -985,9 +1047,11 @@
     });
     el.authorLinks.forEach(link => link.addEventListener("click", event => {
       event.preventDefault();
+      setAuthorFlipState(false);
       if (!el.authorDialog.open) el.authorDialog.showModal();
     }));
     el.authorCloseBtn.addEventListener("click", () => el.authorDialog.close());
+    el.authorFlipCard.addEventListener("click", flipAuthorCard);
     el.authorDialog.addEventListener("click", event => {
       if (event.target === el.authorDialog) el.authorDialog.close();
     });
