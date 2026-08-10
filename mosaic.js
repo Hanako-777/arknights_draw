@@ -503,7 +503,7 @@
         // Match the game's gallery thumbnails: keep the board boundary visible
         // without turning the gaps into a heavy dark grid.
         ctx.strokeStyle = "rgba(169,173,177,.88)";
-        ctx.lineWidth = Math.max(1, size / 768 * 2);
+        ctx.lineWidth = Math.max(1, size / 768 * 2) + 1;
         ctx.strokeRect(tileX + ctx.lineWidth / 2, tileY + ctx.lineWidth / 2, tilePixels - ctx.lineWidth, tilePixels - ctx.lineWidth);
       }
     }
