@@ -29,9 +29,11 @@
     fitSubjectBtn: $("fitSubjectBtn"), modeSelect: $("modeSelect"),
     contrastRange: $("contrastRange"), contrastOut: $("contrastOut"),
     saturationRange: $("saturationRange"), saturationOut: $("saturationOut"),
-    generateBtn: $("generateBtn"), gridCanvas: $("gridCanvas"), cellInfo: $("cellInfo"),
+    generateBtn: $("generateBtn"), gridCanvas: $("gridCanvas"), overviewCanvas: $("overviewCanvas"),
+    cellInfo: $("cellInfo"),
     undoBtn: $("undoBtn"), redoBtn: $("redoBtn"), showNumbers: $("showNumbers"),
-    showGrid: $("showGrid"), replaceFrom: $("replaceFrom"), replaceBtn: $("replaceBtn"),
+    showGrid: $("showGrid"), showOverview: $("showOverview"), overviewCard: $("overviewCard"),
+    editorBoardLayout: $("editorBoardLayout"), replaceFrom: $("replaceFrom"), replaceBtn: $("replaceBtn"),
     selectedBadge: $("selectedBadge"), palette: $("palette"), fileName: $("fileName"),
     saveProjectBtn: $("saveProjectBtn"), helpBtn: $("helpBtn"), helpPanel: $("helpPanel"),
     status: $("status"), exportPreviewBtn: $("exportPreviewBtn"),
@@ -60,6 +62,7 @@
 
   const sourceCtx = el.sourceCanvas.getContext("2d", { willReadFrequently: true });
   const gridCtx = el.gridCanvas.getContext("2d");
+  const overviewCtx = el.overviewCanvas.getContext("2d");
   let gridResizeObserver = null;
   let exportHistory = [];
 
@@ -391,6 +394,21 @@
       gridCtx.lineWidth = Math.max(1, backingScale);
       gridCtx.stroke();
     }
+    drawOverview();
+  }
+
+  function drawOverview() {
+    const size = el.overviewCanvas.width;
+    const cell = size / GRID;
+    overviewCtx.clearRect(0, 0, size, size);
+    overviewCtx.imageSmoothingEnabled = false;
+    for (let row = 0; row < GRID; row++) {
+      for (let col = 0; col < GRID; col++) {
+        const id = state.grid[row * GRID + col];
+        overviewCtx.fillStyle = PALETTE[id - 1];
+        overviewCtx.fillRect(col * cell, row * cell, cell, cell);
+      }
+    }
   }
 
   function syncGridCanvasResolution() {
@@ -655,7 +673,8 @@
         contrast: Number(el.contrastRange.value),
         saturation: Number(el.saturationRange.value),
         showNumbers: el.showNumbers.checked,
-        showGrid: el.showGrid.checked
+        showGrid: el.showGrid.checked,
+        showOverview: el.showOverview.checked
       },
       savedAt
     };
@@ -679,6 +698,8 @@
       if (Number.isFinite(project.settings.saturation)) el.saturationRange.value = String(project.settings.saturation);
       el.showNumbers.checked = project.settings.showNumbers !== false;
       el.showGrid.checked = project.settings.showGrid !== false;
+      el.showOverview.checked = project.settings.showOverview !== false;
+      syncOverviewVisibility();
     }
     if (project.selected) selectColor(project.selected);
     syncOutputs();
@@ -888,6 +909,12 @@
     el.saturationOut.textContent = Number(el.saturationRange.value) > 0 ? `+${el.saturationRange.value}` : el.saturationRange.value;
   }
 
+  function syncOverviewVisibility() {
+    const visible = el.showOverview.checked;
+    el.overviewCard.hidden = !visible;
+    el.editorBoardLayout.classList.toggle("overview-hidden", !visible);
+  }
+
   function bindEvents() {
     el.imageInput.addEventListener("change", () => { loadImageFile(el.imageInput.files[0]); el.imageInput.value = ""; });
     el.projectInput.addEventListener("change", () => loadProjectFile(el.projectInput.files[0]));
@@ -936,6 +963,7 @@
     el.redoBtn.addEventListener("click", redo);
     el.showNumbers.addEventListener("change", drawGrid);
     el.showGrid.addEventListener("change", drawGrid);
+    el.showOverview.addEventListener("change", syncOverviewVisibility);
     el.replaceBtn.addEventListener("click", replaceColor);
 
     el.gridCanvas.addEventListener("pointerdown", event => {
@@ -1005,6 +1033,7 @@
     renderExportHistory();
     bindEvents();
     syncOutputs();
+    syncOverviewVisibility();
     drawGrid();
     updatePaletteCounts();
     updateHistoryButtons();
