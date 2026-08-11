@@ -12,8 +12,9 @@
     "#B4D2DC", "#90D8E6", "#48AEA0", "#B5D3C7", "#273864"
   ];
   const TILE_SIZE = 24;
-  const TILES_PER_SIDE = 4;
-  const MASTER_SIZE = TILE_SIZE * TILES_PER_SIDE;
+  const DEFAULT_TILES_WIDE = 4;
+  const DEFAULT_TILES_HIGH = 4;
+  const MAX_TILES_PER_ROW = 4;
   const MASTER_GAP_TO_TILE_RATIO = 1 / 7;
   const SAMPLE_BLOCK = 8;
   const SOURCE_SIZE = 560;
@@ -21,7 +22,6 @@
   const PROJECT_FORMAT = "arknights_draw-mosaic-project";
   const EXPORT_HISTORY_KEY = "arknights_draw-mosaic-export-history-v1";
   const EXPORT_HISTORY_LIMIT = 20;
-  const TILE_ORDER = Array.from({ length: 16 }, (_, index) => 15 - index);
   const STACK_POSES = [
     { x: -1.00, y:  0.18, r: -1.00 },
     { x:  0.94, y: -0.28, r:  0.82 },
@@ -56,23 +56,29 @@
   const $ = id => document.getElementById(id);
   const el = {
     imageInput: $("imageInput"), projectInput: $("projectInput"), dropZone: $("dropZone"),
-    cropWrap: $("cropWrap"), sourceCanvas: $("sourceCanvas"), sourceMeta: $("sourceMeta"),
+    cropWrap: $("cropWrap"), cropGuideLines: $("cropGuideLines"),
+    sourceCanvas: $("sourceCanvas"), sourceMeta: $("sourceMeta"),
     removeImageBtn: $("removeImageBtn"), zoomRange: $("zoomRange"), zoomOut: $("zoomOut"),
     resetCropBtn: $("resetCropBtn"), fitSubjectBtn: $("fitSubjectBtn"), modeSelect: $("modeSelect"),
     contrastRange: $("contrastRange"), contrastOut: $("contrastOut"),
     saturationRange: $("saturationRange"), saturationOut: $("saturationOut"),
+    tilesWide: $("tilesWide"), tilesHigh: $("tilesHigh"),
     generateBtn: $("generateBtn"), gridCanvas: $("gridCanvas"), masterCanvas: $("masterCanvas"),
     masterMeta: $("masterMeta"), cellInfo: $("cellInfo"), undoBtn: $("undoBtn"), redoBtn: $("redoBtn"),
     showNumbers: $("showNumbers"), showGrid: $("showGrid"), replaceFrom: $("replaceFrom"),
     replaceBtn: $("replaceBtn"), selectedBadge: $("selectedBadge"), palette: $("palette"),
     fileName: $("fileName"), saveProjectBtn: $("saveProjectBtn"), helpBtn: $("helpBtn"),
-    helpPanel: $("helpPanel"), status: $("status"), exportPreviewBtn: $("exportPreviewBtn"),
+    helpDialog: $("mosaicHelpDialog"), helpCloseBtn: $("mosaicHelpCloseBtn"),
+    helpConfirmBtn: $("mosaicHelpConfirmBtn"), status: $("status"), exportPreviewBtn: $("exportPreviewBtn"),
     exportTotalBtn: $("exportTotalBtn"), prevTileBtn: $("prevTileBtn"), nextTileBtn: $("nextTileBtn"),
     exportHistory: $("exportHistory"), historyCount: $("historyCount"), clearHistoryBtn: $("clearHistoryBtn"),
+    exportPreviewHint: $("exportPreviewHint"), exportTotalHint: $("exportTotalHint"), saveProjectHint: $("saveProjectHint"),
     tileTitle: $("tileTitle"), tileProgressText: $("tileProgressText"), tileProgressBar: $("tileProgressBar"),
     tileCard: $("tileCard"), tileCardStack: $("tileCardStack"), tileCardBacks: $("tileCardBacks"),
     noticeDialog: $("mosaicNoticeDialog"),
     noticeCloseBtn: $("mosaicNoticeCloseBtn"), noticeConfirmBtn: $("mosaicNoticeConfirmBtn"),
+    noticeLead: $("mosaicNoticeLead"), exportOrder: $("mosaicExportOrder"),
+    blankBoardWarning: $("mosaicBlankBoardWarning"), exportNote: $("mosaicExportNote"),
     authorLinks: Array.from(document.querySelectorAll("[data-author-dialog]")),
     authorDialog: $("authorDialog"), authorCloseBtn: $("authorCloseBtn"), authorFlipCard: $("authorFlipCard")
   };
@@ -85,7 +91,9 @@
     panY: 0,
     fitFull: false,
     cropDrag: null,
-    masterGrid: new Uint8Array(MASTER_SIZE * MASTER_SIZE).fill(4),
+    tilesWide: DEFAULT_TILES_WIDE,
+    tilesHigh: DEFAULT_TILES_HIGH,
+    masterGrid: new Uint8Array(TILE_SIZE * DEFAULT_TILES_WIDE * TILE_SIZE * DEFAULT_TILES_HIGH).fill(4),
     grid: new Uint8Array(TILE_SIZE * TILE_SIZE).fill(4),
     currentPosition: 0,
     selected: 1,
@@ -180,15 +188,63 @@
     return cleaned || "arknights_draw_mosaic";
   }
 
+  function clampTileDimension(value) {
+    return Math.max(1, Math.min(MAX_TILES_PER_ROW, Math.trunc(Number(value)) || 1));
+  }
+
+  function masterWidth(tilesWide = state.tilesWide) {
+    return TILE_SIZE * tilesWide;
+  }
+
+  function masterHeight(tilesHigh = state.tilesHigh) {
+    return TILE_SIZE * tilesHigh;
+  }
+
+  function tileCount() {
+    return state.tilesWide * state.tilesHigh;
+  }
+
+  function tileOrder() {
+    return Array.from({ length: tileCount() }, (_, index) => tileCount() - index - 1);
+  }
+
+  function dimensionsText(tilesWide = state.tilesWide, tilesHigh = state.tilesHigh) {
+    return `${masterWidth(tilesWide)}×${masterHeight(tilesHigh)}`;
+  }
+
+  function requestedLayout() {
+    return {
+      tilesWide: clampTileDimension(el.tilesWide.value),
+      tilesHigh: clampTileDimension(el.tilesHigh.value)
+    };
+  }
+
+  function configureMaster(tilesWide, tilesHigh, grid = null) {
+    state.tilesWide = clampTileDimension(tilesWide);
+    state.tilesHigh = clampTileDimension(tilesHigh);
+    const expectedLength = masterWidth() * masterHeight();
+    state.masterGrid = grid && grid.length === expectedLength
+      ? new Uint8Array(grid)
+      : new Uint8Array(expectedLength).fill(4);
+    state.currentPosition = 0;
+    state.grid = new Uint8Array(TILE_SIZE * TILE_SIZE).fill(4);
+    state.undo = [];
+    state.redo = [];
+    el.tilesWide.value = String(state.tilesWide);
+    el.tilesHigh.value = String(state.tilesHigh);
+    syncMasterCanvasDimensions();
+    updateDynamicCopy();
+  }
+
   function currentTileIndex() {
-    return TILE_ORDER[state.currentPosition];
+    return tileCount() - state.currentPosition - 1;
   }
 
   function tileDetails(tileIndex = currentTileIndex()) {
     return {
       number: tileIndex + 1,
-      row: Math.floor(tileIndex / TILES_PER_SIDE),
-      col: tileIndex % TILES_PER_SIDE
+      row: Math.floor(tileIndex / state.tilesWide),
+      col: tileIndex % state.tilesWide
     };
   }
 
@@ -282,9 +338,44 @@
     ctx.restore();
   }
 
+  function renderCropGuides(tilesWide, tilesHigh) {
+    const fragment = document.createDocumentFragment();
+    for (let column = 1; column < tilesWide; column++) {
+      const line = document.createElement("span");
+      line.className = "crop-guide-line vertical";
+      line.style.left = `${column / tilesWide * 100}%`;
+      fragment.append(line);
+    }
+    for (let row = 1; row < tilesHigh; row++) {
+      const line = document.createElement("span");
+      line.className = "crop-guide-line horizontal";
+      line.style.top = `${row / tilesHigh * 100}%`;
+      fragment.append(line);
+    }
+    el.cropGuideLines.replaceChildren(fragment);
+  }
+
+  function updateSourceCanvasDimensions() {
+    const { tilesWide, tilesHigh } = requestedLayout();
+    const ratio = tilesWide / tilesHigh;
+    const width = ratio >= 1 ? SOURCE_SIZE : Math.max(1, Math.round(SOURCE_SIZE * ratio));
+    const height = ratio >= 1 ? Math.max(1, Math.round(SOURCE_SIZE / ratio)) : SOURCE_SIZE;
+    if (el.sourceCanvas.width !== width || el.sourceCanvas.height !== height) {
+      el.sourceCanvas.width = width;
+      el.sourceCanvas.height = height;
+    }
+    const displayLongSide = 280;
+    const displayWidth = ratio >= 1 ? displayLongSide : Math.max(70, Math.round(displayLongSide * ratio));
+    const displayHeight = ratio >= 1 ? Math.max(70, Math.round(displayLongSide / ratio)) : displayLongSide;
+    el.cropWrap.style.width = `${displayWidth}px`;
+    el.cropWrap.style.height = `${displayHeight}px`;
+    el.cropWrap.style.aspectRatio = `${tilesWide} / ${tilesHigh}`;
+    renderCropGuides(tilesWide, tilesHigh);
+  }
+
   function drawSource() {
-    sourceCtx.clearRect(0, 0, SOURCE_SIZE, SOURCE_SIZE);
-    drawImageTo(sourceCtx, SOURCE_SIZE, SOURCE_SIZE);
+    sourceCtx.clearRect(0, 0, el.sourceCanvas.width, el.sourceCanvas.height);
+    drawImageTo(sourceCtx, el.sourceCanvas.width, el.sourceCanvas.height);
   }
 
   function resetCrop(full = false) {
@@ -321,7 +412,8 @@
       el.fileName.value = file.name.replace(/\.[^.]+$/, "").slice(0, 40) || "arknights_draw_mosaic";
       syncOutputs();
       drawSource();
-      setStatus("图片已载入。调整裁剪后生成96×96大图初稿。 ");
+      const layout = requestedLayout();
+      setStatus(`图片已载入。调整裁剪后生成 ${dimensionsText(layout.tilesWide, layout.tilesHigh)} 大图。`);
     };
     image.onerror = () => {
       URL.revokeObjectURL(url);
@@ -346,15 +438,16 @@
     el.generateBtn.disabled = true;
     el.zoomRange.value = "100";
     syncOutputs();
-    sourceCtx.clearRect(0, 0, SOURCE_SIZE, SOURCE_SIZE);
-    setStatus("已移除原图；96×96大图和当前施工进度已保留。 ");
+    sourceCtx.clearRect(0, 0, el.sourceCanvas.width, el.sourceCanvas.height);
+    setStatus(`已移除原图；${dimensionsText()}大图和当前施工进度已保留。`);
   }
 
   function extractTile(tileIndex) {
     const result = new Uint8Array(TILE_SIZE * TILE_SIZE);
     const { row: tileRow, col: tileCol } = tileDetails(tileIndex);
+    const width = masterWidth();
     for (let row = 0; row < TILE_SIZE; row++) {
-      const masterStart = (tileRow * TILE_SIZE + row) * MASTER_SIZE + tileCol * TILE_SIZE;
+      const masterStart = (tileRow * TILE_SIZE + row) * width + tileCol * TILE_SIZE;
       result.set(state.masterGrid.subarray(masterStart, masterStart + TILE_SIZE), row * TILE_SIZE);
     }
     return result;
@@ -362,8 +455,9 @@
 
   function writeCurrentTileToMaster() {
     const { row: tileRow, col: tileCol } = tileDetails();
+    const width = masterWidth();
     for (let row = 0; row < TILE_SIZE; row++) {
-      const masterStart = (tileRow * TILE_SIZE + row) * MASTER_SIZE + tileCol * TILE_SIZE;
+      const masterStart = (tileRow * TILE_SIZE + row) * width + tileCol * TILE_SIZE;
       state.masterGrid.set(state.grid.subarray(row * TILE_SIZE, (row + 1) * TILE_SIZE), masterStart);
     }
   }
@@ -383,27 +477,35 @@
 
   function buildMasterFromImage() {
     if (!state.image) return;
-    setStatus("正在分析9216个方格并匹配固定40色，请稍候……");
+    const requested = requestedLayout();
+    const requestedWidth = masterWidth(requested.tilesWide);
+    const requestedHeight = masterHeight(requested.tilesHigh);
+    const requestedCells = requestedWidth * requestedHeight;
+    setStatus(`正在分析${requestedCells}个方格并匹配固定40色，请稍候……`);
     el.generateBtn.disabled = true;
     window.setTimeout(() => {
       try {
-        const sampleSize = MASTER_SIZE * SAMPLE_BLOCK;
+        configureMaster(requested.tilesWide, requested.tilesHigh);
+        const width = masterWidth();
+        const height = masterHeight();
+        const sampleWidth = width * SAMPLE_BLOCK;
+        const sampleHeight = height * SAMPLE_BLOCK;
         const sample = document.createElement("canvas");
-        sample.width = sampleSize;
-        sample.height = sampleSize;
+        sample.width = sampleWidth;
+        sample.height = sampleHeight;
         const ctx = sample.getContext("2d", { willReadFrequently: true });
-        drawImageTo(ctx, sampleSize, sampleSize);
-        const data = ctx.getImageData(0, 0, sampleSize, sampleSize).data;
-        const result = new Uint8Array(MASTER_SIZE * MASTER_SIZE);
+        drawImageTo(ctx, sampleWidth, sampleHeight);
+        const data = ctx.getImageData(0, 0, sampleWidth, sampleHeight).data;
+        const result = new Uint8Array(width * height);
         const mode = el.modeSelect.value;
 
-        for (let row = 0; row < MASTER_SIZE; row++) {
-          for (let col = 0; col < MASTER_SIZE; col++) {
+        for (let row = 0; row < height; row++) {
+          for (let col = 0; col < width; col++) {
             const counts = new Uint16Array(41);
             let sumR = 0, sumG = 0, sumB = 0;
             for (let y = 0; y < SAMPLE_BLOCK; y++) {
               for (let x = 0; x < SAMPLE_BLOCK; x++) {
-                const pixel = ((row * SAMPLE_BLOCK + y) * sampleSize + col * SAMPLE_BLOCK + x) * 4;
+                const pixel = ((row * SAMPLE_BLOCK + y) * sampleWidth + col * SAMPLE_BLOCK + x) * 4;
                 const adjusted = adjustedRgb(data[pixel], data[pixel + 1], data[pixel + 2]);
                 sumR += adjusted[0]; sumG += adjusted[1]; sumB += adjusted[2];
                 counts[nearestPaletteId(adjusted[0], adjusted[1], adjusted[2])]++;
@@ -426,7 +528,7 @@
               if (darkTotal / total >= 0.18) chosen = darkId;
               else if (counts[dominantId] / total >= 0.36) chosen = dominantId;
             }
-            result[row * MASTER_SIZE + col] = chosen;
+            result[row * width + col] = chosen;
           }
         }
 
@@ -435,8 +537,8 @@
         loadCurrentTile();
         saveLocal();
         const usedColors = new Set(result).size;
-        el.masterMeta.textContent = `96×96 · 16张24×24 · ${usedColors}色`;
-        setStatus(`96×96大图已生成，共使用 ${usedColors} 种固定色。从右下角16号画板开始施工。`);
+        updateDynamicCopy(usedColors);
+        setStatus(`${dimensionsText()}大图已生成，共使用 ${usedColors} 种固定色。从右下角${String(tileCount()).padStart(2, "0")}号画板开始施工。`);
       } catch (error) {
         console.error(error);
         setStatus(`转换失败：${error.message}`, true);
@@ -478,24 +580,64 @@
     }
   }
 
-  function drawMasterTiles(ctx, size, { labels = false, active = false, gapPixels = null } = {}) {
-    const gap = gapPixels ?? size / (TILES_PER_SIDE / MASTER_GAP_TO_TILE_RATIO + TILES_PER_SIDE - 1);
-    const tilePixels = (size - gap * (TILES_PER_SIDE - 1)) / TILES_PER_SIDE;
+  function masterLayoutGeometry(width, height, gapPixels = null) {
+    let tilePixels;
+    let gap;
+    if (gapPixels == null) {
+      const widthUnits = state.tilesWide + MASTER_GAP_TO_TILE_RATIO * (state.tilesWide - 1);
+      const heightUnits = state.tilesHigh + MASTER_GAP_TO_TILE_RATIO * (state.tilesHigh - 1);
+      tilePixels = Math.min(width / widthUnits, height / heightUnits);
+      gap = tilePixels * MASTER_GAP_TO_TILE_RATIO;
+    } else {
+      gap = gapPixels;
+      tilePixels = Math.min(
+        (width - gap * (state.tilesWide - 1)) / state.tilesWide,
+        (height - gap * (state.tilesHigh - 1)) / state.tilesHigh
+      );
+    }
+    const boardWidth = tilePixels * state.tilesWide + gap * (state.tilesWide - 1);
+    const boardHeight = tilePixels * state.tilesHigh + gap * (state.tilesHigh - 1);
+    return {
+      tilePixels,
+      gap,
+      offsetX: (width - boardWidth) / 2,
+      offsetY: (height - boardHeight) / 2
+    };
+  }
+
+  function syncMasterCanvasDimensions() {
+    const widthUnits = state.tilesWide + MASTER_GAP_TO_TILE_RATIO * (state.tilesWide - 1);
+    const heightUnits = state.tilesHigh + MASTER_GAP_TO_TILE_RATIO * (state.tilesHigh - 1);
+    const longSide = 768;
+    if (widthUnits >= heightUnits) {
+      el.masterCanvas.width = longSide;
+      el.masterCanvas.height = Math.max(1, Math.round(longSide * heightUnits / widthUnits));
+    } else {
+      el.masterCanvas.height = longSide;
+      el.masterCanvas.width = Math.max(1, Math.round(longSide * widthUnits / heightUnits));
+    }
+    el.masterCanvas.setAttribute("aria-label", `${dimensionsText()}大图总览，${state.tilesWide}乘${state.tilesHigh}画板`);
+  }
+
+  function drawMasterTiles(ctx, width, height, { labels = false, active = false, gapPixels = null } = {}) {
+    const { gap, tilePixels, offsetX, offsetY } = masterLayoutGeometry(width, height, gapPixels);
     const cell = tilePixels / TILE_SIZE;
-    ctx.clearRect(0, 0, size, size);
+    const masterGridWidth = masterWidth();
+    const referenceSize = Math.max(width, height);
+    ctx.clearRect(0, 0, width, height);
     ctx.imageSmoothingEnabled = false;
     ctx.fillStyle = "#c7cacf";
-    ctx.fillRect(0, 0, size, size);
+    ctx.fillRect(0, 0, width, height);
 
-    for (let tileRow = 0; tileRow < TILES_PER_SIDE; tileRow++) {
-      for (let tileCol = 0; tileCol < TILES_PER_SIDE; tileCol++) {
-        const tileX = tileCol * (tilePixels + gap);
-        const tileY = tileRow * (tilePixels + gap);
+    for (let tileRow = 0; tileRow < state.tilesHigh; tileRow++) {
+      for (let tileCol = 0; tileCol < state.tilesWide; tileCol++) {
+        const tileX = offsetX + tileCol * (tilePixels + gap);
+        const tileY = offsetY + tileRow * (tilePixels + gap);
         for (let row = 0; row < TILE_SIZE; row++) {
           const masterRow = tileRow * TILE_SIZE + row;
           for (let col = 0; col < TILE_SIZE; col++) {
             const masterCol = tileCol * TILE_SIZE + col;
-            const id = state.masterGrid[masterRow * MASTER_SIZE + masterCol];
+            const id = state.masterGrid[masterRow * masterGridWidth + masterCol];
             ctx.fillStyle = PALETTE[id - 1];
             ctx.fillRect(tileX + col * cell, tileY + row * cell, cell + 0.2, cell + 0.2);
           }
@@ -503,42 +645,42 @@
         // Match the game's gallery thumbnails: keep the board boundary visible
         // without turning the gaps into a heavy dark grid.
         ctx.strokeStyle = "rgba(169,173,177,.88)";
-        ctx.lineWidth = Math.max(1, size / 768 * 2) + 1;
+        ctx.lineWidth = Math.max(1, referenceSize / 768 * 2) + 1;
         ctx.strokeRect(tileX + ctx.lineWidth / 2, tileY + ctx.lineWidth / 2, tilePixels - ctx.lineWidth, tilePixels - ctx.lineWidth);
       }
     }
 
     if (labels) {
-      ctx.font = `900 ${18 * size / 768}px Consolas, monospace`;
+      ctx.font = `900 ${18 * referenceSize / 768}px Consolas, monospace`;
       ctx.textAlign = "left";
       ctx.textBaseline = "top";
-      for (let tileIndex = 0; tileIndex < 16; tileIndex++) {
+      for (let tileIndex = 0; tileIndex < tileCount(); tileIndex++) {
         const { row, col, number } = tileDetails(tileIndex);
-        const x = col * (tilePixels + gap) + 7 * size / 768;
-        const y = row * (tilePixels + gap) + 7 * size / 768;
+        const x = offsetX + col * (tilePixels + gap) + 7 * referenceSize / 768;
+        const y = offsetY + row * (tilePixels + gap) + 7 * referenceSize / 768;
         ctx.fillStyle = "rgba(17,19,22,.82)";
-        ctx.fillRect(x, y, 34 * size / 768, 27 * size / 768);
+        ctx.fillRect(x, y, 34 * referenceSize / 768, 27 * referenceSize / 768);
         ctx.fillStyle = "#fff";
-        ctx.fillText(String(number).padStart(2, "0"), x + 5 * size / 768, y + 4 * size / 768);
+        ctx.fillText(String(number).padStart(2, "0"), x + 5 * referenceSize / 768, y + 4 * referenceSize / 768);
       }
     }
 
     if (active) {
       const current = tileDetails();
-      const x = current.col * (tilePixels + gap);
-      const y = current.row * (tilePixels + gap);
+      const x = offsetX + current.col * (tilePixels + gap);
+      const y = offsetY + current.row * (tilePixels + gap);
       ctx.strokeStyle = "#18d4d1";
-      ctx.lineWidth = 7 * size / 768;
+      ctx.lineWidth = 7 * referenceSize / 768;
       ctx.strokeRect(x + ctx.lineWidth / 2, y + ctx.lineWidth / 2, tilePixels - ctx.lineWidth, tilePixels - ctx.lineWidth);
       ctx.strokeStyle = "#ff2b91";
-      ctx.lineWidth = 2 * size / 768;
-      const inset = 8 * size / 768;
+      ctx.lineWidth = 2 * referenceSize / 768;
+      const inset = 8 * referenceSize / 768;
       ctx.strokeRect(x + inset, y + inset, tilePixels - inset * 2, tilePixels - inset * 2);
     }
   }
 
   function drawMaster() {
-    drawMasterTiles(masterCtx, el.masterCanvas.width, { labels: true, active: true });
+    drawMasterTiles(masterCtx, el.masterCanvas.width, el.masterCanvas.height, { labels: true, active: true });
   }
 
   function syncGridCanvasResolution() {
@@ -554,17 +696,19 @@
 
   function updateTileNavigation() {
     const details = tileDetails();
+    const count = tileCount();
     el.tileTitle.textContent = `${String(details.number).padStart(2, "0")}号画板 · R${details.row + 1}-C${details.col + 1}`;
-    el.tileProgressText.textContent = `${state.currentPosition + 1} / 16`;
-    el.tileProgressBar.style.width = `${(state.currentPosition + 1) / 16 * 100}%`;
+    el.tileProgressText.textContent = `${state.currentPosition + 1} / ${count}`;
+    el.tileProgressBar.style.width = `${(state.currentPosition + 1) / count * 100}%`;
     el.prevTileBtn.disabled = state.currentPosition === 0 || state.animating;
-    el.nextTileBtn.disabled = state.currentPosition === 15 || state.animating;
+    el.nextTileBtn.disabled = state.currentPosition === count - 1 || state.animating;
     el.cellInfo.textContent = `画板 ${String(details.number).padStart(2, "0")} · R— C—`;
     renderCardStack();
   }
 
   function renderCardStack() {
-    const remaining = TILE_ORDER.length - state.currentPosition - 1;
+    const count = tileCount();
+    const remaining = count - state.currentPosition - 1;
     const fragment = document.createDocumentFragment();
     const edgeColors = [
       "rgba(24, 212, 209, .86)", "rgba(17, 19, 22, .30)",
@@ -580,7 +724,7 @@
       const offsetY = pose.y * spread + Math.sin(layer * 78.233) * 1.4;
       const rotation = pose.r * (0.42 + layer * 0.055);
       back.className = "tile-card-back";
-      back.style.zIndex = String(TILE_ORDER.length - layer);
+      back.style.zIndex = String(count - layer);
       back.style.setProperty("--stack-x", `${offsetX.toFixed(2)}px`);
       back.style.setProperty("--stack-y", `${offsetY.toFixed(2)}px`);
       back.style.setProperty("--stack-rotate", `${rotation.toFixed(3)}deg`);
@@ -598,7 +742,7 @@
 
   async function moveTile(delta) {
     const nextPosition = state.currentPosition + delta;
-    if (state.animating || nextPosition < 0 || nextPosition >= TILE_ORDER.length) return;
+    if (state.animating || nextPosition < 0 || nextPosition >= tileCount()) return;
     state.animating = true;
     writeCurrentTileToMaster();
     updateTileNavigation();
@@ -621,7 +765,7 @@
   }
 
   async function jumpToTile(tileIndex) {
-    const targetPosition = TILE_ORDER.indexOf(tileIndex);
+    const targetPosition = tileCount() - tileIndex - 1;
     if (targetPosition < 0 || targetPosition === state.currentPosition || state.animating) return;
     const direction = targetPosition > state.currentPosition ? 1 : -1;
     state.animating = true;
@@ -746,10 +890,10 @@
     const canvas = document.createElement("canvas");
     const tilePixels = TILE_SIZE * scale;
     const exportGap = tilePixels * MASTER_GAP_TO_TILE_RATIO;
-    canvas.width = MASTER_SIZE * scale + exportGap * (TILES_PER_SIDE - 1);
-    canvas.height = canvas.width;
+    canvas.width = tilePixels * state.tilesWide + exportGap * (state.tilesWide - 1);
+    canvas.height = tilePixels * state.tilesHigh + exportGap * (state.tilesHigh - 1);
     const ctx = canvas.getContext("2d");
-    drawMasterTiles(ctx, canvas.width, { gapPixels: exportGap });
+    drawMasterTiles(ctx, canvas.width, canvas.height, { gapPixels: exportGap });
     return canvas;
   }
 
@@ -794,8 +938,39 @@
       }
     }
     drawTileLegend(ctx, tileGrid, details, board, legendWidth, board);
+    drawTileTransitionNotice(ctx, details, board, canvas.height);
     drawDrawingSignature(ctx, canvas);
     return canvas;
+  }
+
+  function tileTransitionNotice(details) {
+    if (state.tilesWide >= MAX_TILES_PER_ROW || state.tilesHigh <= 1) return "";
+    if (state.tilesWide === 1) return "请注意添加空白或其他画板";
+    if (details.col === 0 && details.row > 0) return "完成本画板后注意填充空白画板！";
+    if (details.col === state.tilesWide - 1 && details.row < state.tilesHigh - 1) return "请确认是否已添加合适的空白画板";
+    return "";
+  }
+
+  function drawTileTransitionNotice(ctx, details, boardWidth, canvasHeight) {
+    const notice = tileTransitionNotice(details);
+    if (!notice) return;
+    const centerX = boardWidth / 2;
+    const baseline = canvasHeight - 17;
+    ctx.save();
+    ctx.textAlign = "center";
+    ctx.textBaseline = "alphabetic";
+    ctx.fillStyle = "#17191c";
+    ctx.font = '800 18px "Microsoft YaHei UI", sans-serif';
+    ctx.fillText(notice, centerX, baseline);
+    const underlineWidth = Math.min(boardWidth - 120, ctx.measureText(notice).width + 30);
+    ctx.beginPath();
+    ctx.moveTo(centerX - underlineWidth / 2, baseline + 7);
+    ctx.lineTo(centerX + underlineWidth / 2, baseline + 7);
+    ctx.strokeStyle = "rgba(236, 211, 101, .84)";
+    ctx.lineWidth = 5;
+    ctx.lineCap = "round";
+    ctx.stroke();
+    ctx.restore();
   }
 
   function drawTileLegend(ctx, tileGrid, details, left, width, height) {
@@ -995,11 +1170,13 @@
     el.noticeConfirmBtn.disabled = true;
     try {
       const files = [];
-      for (let position = 0; position < TILE_ORDER.length; position++) {
-        const tileIndex = TILE_ORDER[position];
+      const order = tileOrder();
+      const count = order.length;
+      for (let position = 0; position < count; position++) {
+        const tileIndex = order[position];
         const details = tileDetails(tileIndex);
-        el.noticeConfirmBtn.textContent = `正在生成 ${position + 1} / 16`;
-        setStatus(`正在生成 ${String(details.number).padStart(2, "0")}号画板图纸（${position + 1}/16）…`);
+        el.noticeConfirmBtn.textContent = `正在生成 ${position + 1} / ${count}`;
+        setStatus(`正在生成 ${String(details.number).padStart(2, "0")}号画板图纸（${position + 1}/${count}）…`);
         const canvas = createTileNumberCanvas(tileIndex);
         const blob = await canvasToPngBlob(canvas);
         files.push({
@@ -1008,12 +1185,12 @@
         });
         await new Promise(resolve => requestAnimationFrame(resolve));
       }
-      const filename = `${safeName()}_96x96_16张图纸.zip`;
+      const filename = `${safeName()}_${dimensionsText()}_${count}张图纸.zip`;
       downloadBlob(createStoredZip(files), filename);
       const historyPersisted = recordExportHistory();
       el.noticeDialog.close();
       setStatus(historyPersisted
-        ? `已按16→01顺序导出16张带署名图纸，并加入大图历史：${filename}`
+        ? `已按${count}→01顺序导出${count}张带署名图纸，并加入大图历史：${filename}`
         : `已导出 ${filename}；当前浏览器禁止本地存储，历史只能保留到本页关闭前。`);
     } catch (error) {
       setStatus(`图纸导出失败：${error.message}`, true);
@@ -1047,10 +1224,12 @@
     writeCurrentTileToMaster();
     return {
       format: PROJECT_FORMAT,
-      version: 1,
-      masterSize: MASTER_SIZE,
+      version: 2,
+      masterWidth: masterWidth(),
+      masterHeight: masterHeight(),
       tileSize: TILE_SIZE,
-      tilesPerSide: TILES_PER_SIDE,
+      tilesWide: state.tilesWide,
+      tilesHigh: state.tilesHigh,
       palette: PALETTE,
       masterGrid: Array.from(state.masterGrid),
       currentPosition: state.currentPosition,
@@ -1067,19 +1246,39 @@
     };
   }
 
+  function projectDimensions(project) {
+    if (!project || project.format !== PROJECT_FORMAT || project.tileSize !== TILE_SIZE) return null;
+    let tilesWide = Number(project.tilesWide);
+    let tilesHigh = Number(project.tilesHigh);
+    if (!Number.isInteger(tilesWide) || !Number.isInteger(tilesHigh)) {
+      const legacySide = Number(project.tilesPerSide);
+      if (!Number.isInteger(legacySide) || Number(project.masterSize) !== TILE_SIZE * legacySide) return null;
+      tilesWide = legacySide;
+      tilesHigh = legacySide;
+    }
+    if (tilesWide < 1 || tilesWide > MAX_TILES_PER_ROW || tilesHigh < 1 || tilesHigh > MAX_TILES_PER_ROW) return null;
+    const width = masterWidth(tilesWide);
+    const height = masterHeight(tilesHigh);
+    if (project.masterWidth != null && Number(project.masterWidth) !== width) return null;
+    if (project.masterHeight != null && Number(project.masterHeight) !== height) return null;
+    return { tilesWide, tilesHigh, width, height, count: tilesWide * tilesHigh };
+  }
+
   function validateProject(project) {
-    if (!project || project.format !== PROJECT_FORMAT || project.masterSize !== MASTER_SIZE || project.tileSize !== TILE_SIZE || !Array.isArray(project.masterGrid) || project.masterGrid.length !== MASTER_SIZE * MASTER_SIZE) {
-      throw new Error("不是有效的96×96大图工程文件");
+    const dimensions = projectDimensions(project);
+    if (!dimensions || !Array.isArray(project.masterGrid) || project.masterGrid.length !== dimensions.width * dimensions.height) {
+      throw new Error("不是有效的大图工程文件");
     }
     if (project.masterGrid.some(id => !Number.isInteger(id) || id < 1 || id > 40)) {
       throw new Error("工程中含有固定色板以外的编号");
     }
+    return dimensions;
   }
 
   function applyProject(project) {
-    validateProject(project);
-    state.masterGrid = new Uint8Array(project.masterGrid);
-    state.currentPosition = Math.max(0, Math.min(15, Number(project.currentPosition) || 0));
+    const dimensions = validateProject(project);
+    configureMaster(dimensions.tilesWide, dimensions.tilesHigh, project.masterGrid);
+    state.currentPosition = Math.max(0, Math.min(dimensions.count - 1, Number(project.currentPosition) || 0));
     if (project.fileName) el.fileName.value = String(project.fileName).slice(0, 40);
     if (project.settings) {
       if (["hybrid", "dominant", "average"].includes(project.settings.mode)) el.modeSelect.value = project.settings.mode;
@@ -1089,6 +1288,7 @@
       el.showGrid.checked = project.settings.showGrid !== false;
     }
     if (project.selected) selectColor(project.selected);
+    updateSourceCanvasDimensions();
     syncOutputs();
     loadCurrentTile();
     saveLocal();
@@ -1096,7 +1296,7 @@
 
   function saveProject() {
     const project = createProjectData();
-    const filename = `${safeName()}_96x96_大图工程.json`;
+    const filename = `${safeName()}_${dimensionsText()}_大图工程.json`;
     downloadBlob(new Blob([JSON.stringify(project, null, 2)], { type: "application/json;charset=utf-8" }), filename);
     setStatus(`大图工程已保存：${filename}`);
   }
@@ -1107,7 +1307,7 @@
     reader.onload = () => {
       try {
         applyProject(JSON.parse(String(reader.result)));
-        setStatus("96×96大图工程已载入，可以从当前画板继续施工。 ");
+        setStatus(`${dimensionsText()}大图工程已载入，可以从当前画板继续施工。`);
       } catch (error) {
         setStatus(`载入失败：${error.message}`, true);
       } finally {
@@ -1118,7 +1318,8 @@
   }
 
   function historySignature(project) {
-    return `${project.fileName}|${project.currentPosition}|${crc32(Uint8Array.from(project.masterGrid))}`;
+    const dimensions = projectDimensions(project);
+    return `${project.fileName}|${dimensions?.tilesWide || 0}x${dimensions?.tilesHigh || 0}|${project.currentPosition}|${crc32(Uint8Array.from(project.masterGrid))}`;
   }
 
   function loadExportHistory() {
@@ -1147,22 +1348,27 @@
     }
   }
 
-  function drawHistoryThumbnail(canvas, grid) {
-    canvas.width = MASTER_SIZE;
-    canvas.height = MASTER_SIZE;
+  function drawHistoryThumbnail(canvas, project) {
+    const dimensions = validateProject(project);
+    const grid = project.masterGrid;
+    canvas.width = dimensions.width;
+    canvas.height = dimensions.height;
     const ctx = canvas.getContext("2d");
     ctx.imageSmoothingEnabled = false;
-    for (let row = 0; row < MASTER_SIZE; row++) {
-      for (let col = 0; col < MASTER_SIZE; col++) {
-        ctx.fillStyle = PALETTE[grid[row * MASTER_SIZE + col] - 1];
+    for (let row = 0; row < dimensions.height; row++) {
+      for (let col = 0; col < dimensions.width; col++) {
+        ctx.fillStyle = PALETTE[grid[row * dimensions.width + col] - 1];
         ctx.fillRect(col, row, 1, 1);
       }
     }
     ctx.fillStyle = "rgba(192, 196, 200, .94)";
-    for (let index = 1; index < TILES_PER_SIDE; index++) {
+    for (let index = 1; index < dimensions.tilesWide; index++) {
       const at = index * TILE_SIZE;
-      ctx.fillRect(at - 1, 0, 2, MASTER_SIZE);
-      ctx.fillRect(0, at - 1, MASTER_SIZE, 2);
+      ctx.fillRect(at - 1, 0, 2, dimensions.height);
+    }
+    for (let index = 1; index < dimensions.tilesHigh; index++) {
+      const at = index * TILE_SIZE;
+      ctx.fillRect(0, at - 1, dimensions.width, 2);
     }
   }
 
@@ -1216,13 +1422,14 @@
       const canvas = document.createElement("canvas");
       canvas.className = "history-thumb";
       canvas.setAttribute("aria-hidden", "true");
-      drawHistoryThumbnail(canvas, record.project.masterGrid);
+      drawHistoryThumbnail(canvas, record.project);
       const copy = document.createElement("span");
       copy.className = "history-copy";
       const name = document.createElement("strong");
       name.textContent = record.project.fileName;
       const meta = document.createElement("span");
-      meta.textContent = `${new Set(record.project.masterGrid).size} 色 · 96×96 · 进度 ${Number(record.project.currentPosition) + 1}/16`;
+      const dimensions = projectDimensions(record.project);
+      meta.textContent = `${new Set(record.project.masterGrid).size} 色 · ${dimensions.width}×${dimensions.height} · ${dimensions.tilesWide}×${dimensions.tilesHigh}画板 · 进度 ${Number(record.project.currentPosition) + 1}/${dimensions.count}`;
       const time = document.createElement("small");
       time.textContent = formatHistoryTime(record.exportedAt);
       copy.append(name, meta, time);
@@ -1269,6 +1476,9 @@
     try {
       writeCurrentTileToMaster();
       localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        version: 2,
+        tilesWide: state.tilesWide,
+        tilesHigh: state.tilesHigh,
         masterGrid: Array.from(state.masterGrid),
         currentPosition: state.currentPosition,
         fileName: el.fileName.value
@@ -1279,9 +1489,12 @@
   function restoreLocal() {
     try {
       const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
-      if (saved && Array.isArray(saved.masterGrid) && saved.masterGrid.length === MASTER_SIZE * MASTER_SIZE && saved.masterGrid.every(id => Number.isInteger(id) && id >= 1 && id <= 40)) {
-        state.masterGrid = new Uint8Array(saved.masterGrid);
-        state.currentPosition = Math.max(0, Math.min(15, Number(saved.currentPosition) || 0));
+      const tilesWide = clampTileDimension(saved?.tilesWide || DEFAULT_TILES_WIDE);
+      const tilesHigh = clampTileDimension(saved?.tilesHigh || DEFAULT_TILES_HIGH);
+      const expectedLength = masterWidth(tilesWide) * masterHeight(tilesHigh);
+      if (saved && Array.isArray(saved.masterGrid) && saved.masterGrid.length === expectedLength && saved.masterGrid.every(id => Number.isInteger(id) && id >= 1 && id <= 40)) {
+        configureMaster(tilesWide, tilesHigh, saved.masterGrid);
+        state.currentPosition = Math.max(0, Math.min(tileCount() - 1, Number(saved.currentPosition) || 0));
         if (saved.fileName) el.fileName.value = String(saved.fileName).slice(0, 40);
       }
     } catch (_) { /* ignore damaged cache */ }
@@ -1293,7 +1506,55 @@
     el.saturationOut.textContent = Number(el.saturationRange.value) > 0 ? `+${el.saturationRange.value}` : el.saturationRange.value;
   }
 
+  function updateDynamicCopy(usedColors = new Set(state.masterGrid).size) {
+    const count = tileCount();
+    const size = dimensionsText();
+    el.masterMeta.textContent = `${size} · ${state.tilesWide}×${state.tilesHigh}画板 · ${count}张 · ${usedColors}色`;
+    el.exportPreviewHint.textContent = `导出一张${size}大图效果预览`;
+    el.exportTotalHint.textContent = `按${count}→01顺序打包下载${count}张带署名图纸`;
+    el.saveProjectHint.textContent = `保存${masterWidth() * masterHeight()}格、${state.tilesWide}×${state.tilesHigh}布局和当前进度`;
+  }
+
+  function renderExportNotice() {
+    const order = tileOrder();
+    const count = order.length;
+    el.noticeLead.textContent = `请从右下角${String(count).padStart(2, "0")}号画板开始，向左上角倒着完成：`;
+    const fragment = document.createDocumentFragment();
+    order.forEach((tileIndex, index) => {
+      const number = document.createElement("strong");
+      number.textContent = String(tileIndex + 1).padStart(2, "0");
+      fragment.append(number);
+      if (index < order.length - 1) {
+        const arrow = document.createElement("span");
+        arrow.textContent = "→";
+        fragment.append(arrow);
+      }
+    });
+    el.exportOrder.replaceChildren(fragment);
+
+    const missing = MAX_TILES_PER_ROW - state.tilesWide;
+    el.blankBoardWarning.classList.toggle("is-complete", missing === 0);
+    if (missing > 0) {
+      el.blankBoardWarning.innerHTML = `当前每行只有 <strong>${state.tilesWide} 张</strong>画板。每完成一行后，请务必新建并保存 <strong>${missing} 张空白画板</strong>，把这一行凑满4张再画下一行；空白画板不需要提交，新建后直接保存即可。`;
+    } else {
+      el.blankBoardWarning.innerHTML = "当前布局每行正好4张画板，<strong>无需额外补空白画板</strong>。仍请确认按右下角到左上角的倒序施工。";
+    }
+    el.exportNote.textContent = `确认后将生成${count}张带署名图纸，并自动打包为ZIP文件。最后编辑、提交或保存的画板会排在最前面，请特别注意顺序。`;
+    el.noticeConfirmBtn.textContent = `导出 ${count} 张图纸 ZIP`;
+  }
+
+  function handleRequestedLayoutChange() {
+    const requested = requestedLayout();
+    updateSourceCanvasDimensions();
+    drawSource();
+    const size = dimensionsText(requested.tilesWide, requested.tilesHigh);
+    const count = requested.tilesWide * requested.tilesHigh;
+    el.generateBtn.title = `生成${size}大图，共${count}张24×24画板`;
+    setStatus(`画板布局已设为 ${requested.tilesWide}×${requested.tilesHigh}，将生成 ${size} 大图（${count}张画板）。上传或调整图片后点击“生成大图”应用。`);
+  }
+
   function showExportNotice() {
+    renderExportNotice();
     if (!el.noticeDialog.open) el.noticeDialog.showModal();
   }
 
@@ -1335,6 +1596,8 @@
     el.zoomRange.addEventListener("input", () => { state.zoom = Number(el.zoomRange.value) / 100; syncOutputs(); drawSource(); });
     el.contrastRange.addEventListener("input", syncOutputs);
     el.saturationRange.addEventListener("input", syncOutputs);
+    el.tilesWide.addEventListener("change", handleRequestedLayoutChange);
+    el.tilesHigh.addEventListener("change", handleRequestedLayoutChange);
     el.resetCropBtn.addEventListener("click", () => resetCrop(false));
     el.fitSubjectBtn.addEventListener("click", () => resetCrop(!state.fitFull));
     el.removeImageBtn.addEventListener("click", event => { event.stopPropagation(); removeSourceImage(); });
@@ -1351,9 +1614,12 @@
 
     el.masterCanvas.addEventListener("click", event => {
       const rect = el.masterCanvas.getBoundingClientRect();
-      const col = Math.max(0, Math.min(3, Math.floor((event.clientX - rect.left) / rect.width * 4)));
-      const row = Math.max(0, Math.min(3, Math.floor((event.clientY - rect.top) / rect.height * 4)));
-      jumpToTile(row * 4 + col);
+      const x = (event.clientX - rect.left) / rect.width * el.masterCanvas.width;
+      const y = (event.clientY - rect.top) / rect.height * el.masterCanvas.height;
+      const geometry = masterLayoutGeometry(el.masterCanvas.width, el.masterCanvas.height);
+      const col = Math.max(0, Math.min(state.tilesWide - 1, Math.round((x - geometry.offsetX - geometry.tilePixels / 2) / (geometry.tilePixels + geometry.gap))));
+      const row = Math.max(0, Math.min(state.tilesHigh - 1, Math.round((y - geometry.offsetY - geometry.tilePixels / 2) / (geometry.tilePixels + geometry.gap))));
+      jumpToTile(row * state.tilesWide + col);
     });
 
     el.gridCanvas.addEventListener("pointerdown", event => {
@@ -1401,10 +1667,10 @@
     });
 
     el.fileName.addEventListener("change", saveLocal);
-    el.helpBtn.addEventListener("click", () => {
-      el.helpPanel.hidden = !el.helpPanel.hidden;
-      el.helpBtn.setAttribute("aria-expanded", String(!el.helpPanel.hidden));
-    });
+    el.helpBtn.addEventListener("click", () => { if (!el.helpDialog.open) el.helpDialog.showModal(); });
+    el.helpCloseBtn.addEventListener("click", () => el.helpDialog.close());
+    el.helpConfirmBtn.addEventListener("click", () => el.helpDialog.close());
+    el.helpDialog.addEventListener("click", event => { if (event.target === el.helpDialog) el.helpDialog.close(); });
     el.authorLinks.forEach(link => link.addEventListener("click", event => {
       event.preventDefault();
       setAuthorFlipState(false);
@@ -1418,7 +1684,7 @@
     el.noticeDialog.addEventListener("click", event => { if (event.target === el.noticeDialog) el.noticeDialog.close(); });
     el.clearHistoryBtn.addEventListener("click", clearExportHistory);
     el.saveProjectBtn.addEventListener("click", saveProject);
-    el.exportPreviewBtn.addEventListener("click", () => downloadCanvas(createMasterPixelCanvas(7), `${safeName()}_96x96_PNG预览.png`));
+    el.exportPreviewBtn.addEventListener("click", () => downloadCanvas(createMasterPixelCanvas(7), `${safeName()}_${dimensionsText()}_PNG预览.png`));
     el.exportTotalBtn.addEventListener("click", showExportNotice);
   }
 
@@ -1429,7 +1695,9 @@
     renderExportHistory();
     renderCoordinateAxes();
     bindEvents();
+    updateSourceCanvasDimensions();
     syncOutputs();
+    updateDynamicCopy();
     loadCurrentTile();
     if ("ResizeObserver" in window) {
       gridResizeObserver = new ResizeObserver(syncGridCanvasResolution);
@@ -1438,6 +1706,7 @@
     window.addEventListener("resize", syncGridCanvasResolution);
     window.addEventListener("beforeunload", saveLocal);
     window.requestAnimationFrame(syncGridCanvasResolution);
+    window.requestAnimationFrame(() => { if (!el.helpDialog.open) el.helpDialog.showModal(); });
   }
 
   init();

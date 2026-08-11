@@ -35,16 +35,11 @@
         <span class="mode-switch-icon" aria-hidden="true">↔</span>
       </a>
       <label class="button ghost file-button">载入工程<input id="projectInput" type="file" accept="application/json,.json"></label>
-      <button id="helpBtn" class="button ghost" aria-expanded="false">使用说明</button>
+      <button id="helpBtn" class="button ghost" aria-haspopup="dialog" aria-controls="mosaicHelpDialog">使用说明</button>
     </div>
   </header>
 
   <main>
-    <section id="helpPanel" class="help-panel" hidden>
-      <strong>推荐流程：</strong>上传图片 → 拖动/缩放裁剪 → 整体生成96×96 → 从右下角16号画板开始施工 → 依次翻到左上角01号画板。<br>
-      每张卡片仍是24×24；下一张会把当前卡片向左抽走，上一张会从左侧回到堆顶。工程文件保存完整96×96网格和当前进度，不包含原图。
-    </section>
-
     <section class="source-stage">
       <article class="panel source-panel">
         <div class="panel-heading">
@@ -64,7 +59,9 @@
 
         <div id="cropWrap" class="crop-wrap" hidden>
           <canvas id="sourceCanvas" width="560" height="560" aria-label="原图裁剪预览"></canvas>
-          <div class="crop-frame" aria-hidden="true"></div>
+          <div class="crop-frame" aria-hidden="true">
+            <div id="cropGuideLines" class="crop-guide-lines"></div>
+          </div>
           <span class="crop-tip">拖动定位 · 滚轮缩放</span>
           <button id="removeImageBtn" class="remove-image" type="button" aria-label="移除当前图片" title="移除当前图片">×</button>
         </div>
@@ -93,7 +90,17 @@
             <span>饱和度 <output id="saturationOut">0</output></span>
             <input id="saturationRange" type="range" min="-50" max="50" value="0">
           </label>
-          <button id="generateBtn" class="button primary full" disabled>生成 96×96 大图初稿</button>
+          <fieldset class="control mosaic-size-control">
+            <legend>画板布局（宽 × 高）</legend>
+            <label><span>每行</span><select id="tilesWide" aria-label="每行画板数">
+              <option value="1">1张</option><option value="2">2张</option><option value="3">3张</option><option value="4" selected>4张</option>
+            </select></label>
+            <b aria-hidden="true">×</b>
+            <label><span>行数</span><select id="tilesHigh" aria-label="画板行数">
+              <option value="1">1行</option><option value="2">2行</option><option value="3">3行</option><option value="4" selected>4行</option>
+            </select></label>
+          </fieldset>
+          <button id="generateBtn" class="button primary full" disabled>生成大图</button>
         </div>
       </article>
 
@@ -103,10 +110,10 @@
             <span class="step">02</span>
             <h2>大图总览</h2>
           </div>
-          <span id="masterMeta" class="meta">96×96 · 4×4分块</span>
+          <span id="masterMeta" class="meta">96×96 · 4×4画板</span>
         </div>
         <div class="master-preview-wrap">
-          <canvas id="masterCanvas" width="768" height="768" aria-label="96乘96大图总览"></canvas>
+          <canvas id="masterCanvas" width="768" height="768" aria-label="大图总览"></canvas>
           <span class="master-preview-tip">点击分块可直接跳转 · 灰色间隔仅用于预览</span>
         </div>
       </article>
@@ -189,15 +196,15 @@
         <label class="name-field">文件名 <input id="fileName" value="arknights_draw_mosaic" maxlength="40"></label>
       </div>
       <div class="export-grid">
-        <button id="exportPreviewBtn" class="export-card"><strong>PNG 预览</strong><span>导出一张96×96大图效果预览</span></button>
-        <button id="exportTotalBtn" class="export-card"><strong>导出图纸 ZIP</strong><span>按16→01顺序打包下载16张带署名图纸</span></button>
-        <button id="saveProjectBtn" class="export-card"><strong>保存工程 JSON</strong><span>保存9216格和当前施工进度</span></button>
+        <button id="exportPreviewBtn" class="export-card"><strong>PNG 预览</strong><span id="exportPreviewHint">导出一张当前大图效果预览</span></button>
+        <button id="exportTotalBtn" class="export-card"><strong>导出图纸 ZIP</strong><span id="exportTotalHint">按倒序打包下载全部带署名图纸</span></button>
+        <button id="saveProjectBtn" class="export-card"><strong>保存工程 JSON</strong><span id="saveProjectHint">保存全部格子、画板布局和当前施工进度</span></button>
       </div>
       <div class="export-history-block">
         <div class="export-history-heading">
           <div>
             <h3>大图导出历史</h3>
-            <p>ZIP导出成功后自动保存96×96工程快照；点击记录可恢复全部16张画板和施工进度。</p>
+            <p>ZIP导出成功后自动保存当前大图工程快照；点击记录可恢复全部画板、布局和施工进度。</p>
           </div>
           <div class="export-history-actions">
             <span id="historyCount">0 份</span>
@@ -206,25 +213,37 @@
         </div>
         <div id="exportHistory" class="export-history" aria-live="polite"></div>
       </div>
-      <p id="status" class="status" role="status">大图模式已就绪。上传图片生成96×96大图，或载入已有大图工程。</p>
+      <p id="status" class="status" role="status">大图模式已就绪。设置画板布局并上传图片生成大图，或载入已有大图工程。</p>
     </section>
   </main>
 
   <footer class="site-footer">奇象巡展·赛博拼豆制图工具·大图模式 · by <a data-author-dialog href="https://github.com/Hanako-777" aria-haspopup="dialog" aria-controls="authorDialog">Hanako</a></footer>
+
+  <dialog id="mosaicHelpDialog" class="author-dialog mosaic-help-dialog" aria-labelledby="mosaicHelpTitle">
+    <div class="author-card mosaic-help-card">
+      <button id="mosaicHelpCloseBtn" class="author-close" type="button" aria-label="关闭使用说明">×</button>
+      <p class="author-kicker">MOSAIC MODE / GUIDE</p>
+      <h2 id="mosaicHelpTitle">大图模式使用说明</h2>
+      <ol class="mosaic-help-steps">
+        <li><strong>设置布局并生成：</strong>先设置每行画板数（宽）和画板行数（高），再上传、裁剪图片并点击“生成大图”。</li>
+        <li><strong>从右下角向左上角倒着拼：</strong>从编号最大的一张开始，按页面显示的倒序逐张完成，最后完成01号画板。</li>
+        <li class="important"><strong>一行不足四张时必须补空白画板：</strong>完成一行后，新建空白画板并直接保存即可，不需要提交；把这一行凑满四张后，再进行下一行的作画。</li>
+        <li><strong>也可以预先新建空白画板：</strong>先建立需要的空白画板再开始作画，但请注意：<em>每次最后编辑完、提交或保存的画板都会排在最前面</em>，务必检查整体顺序。</li>
+      </ol>
+      <p class="mosaic-help-summary">记住两点：<b>右下 → 左上</b>，以及<b>每行必须凑满四张画板</b>。</p>
+      <button id="mosaicHelpConfirmBtn" class="button primary" type="button">我知道了</button>
+    </div>
+  </dialog>
 
   <dialog id="mosaicNoticeDialog" class="author-dialog mosaic-notice-dialog" aria-labelledby="mosaicNoticeTitle">
     <div class="author-card mosaic-notice-card">
       <button id="mosaicNoticeCloseBtn" class="author-close" type="button" aria-label="关闭提示">×</button>
       <p class="author-kicker">MOSAIC MODE / NOTICE</p>
       <h2 id="mosaicNoticeTitle">确认施工顺序</h2>
-      <p>请从右下角开始，按照以下顺序依次完成：</p>
-      <div class="mosaic-export-order" aria-label="画板施工顺序">
-        <strong>16</strong><span>→</span><strong>15</strong><span>→</span><strong>14</strong><span>→</span><strong>13</strong>
-        <strong>12</strong><span>→</span><strong>11</strong><span>→</span><strong>10</strong><span>→</span><strong>09</strong>
-        <strong>08</strong><span>→</span><strong>07</strong><span>→</span><strong>06</strong><span>→</span><strong>05</strong>
-        <strong>04</strong><span>→</span><strong>03</strong><span>→</span><strong>02</strong><span>→</span><strong>01</strong>
-      </div>
-      <small class="mosaic-export-note">确认后将生成16张带署名图纸，并自动打包为ZIP文件。</small>
+      <p id="mosaicNoticeLead">请从右下角开始，按照以下顺序依次完成：</p>
+      <div id="mosaicExportOrder" class="mosaic-export-order" aria-label="画板施工顺序"></div>
+      <div id="mosaicBlankBoardWarning" class="mosaic-blank-board-warning" role="note"></div>
+      <small id="mosaicExportNote" class="mosaic-export-note">确认后将生成全部带署名图纸，并自动打包为ZIP文件。</small>
       <button id="mosaicNoticeConfirmBtn" class="button primary" type="button">按此顺序导出 ZIP</button>
     </div>
   </dialog>
