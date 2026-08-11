@@ -116,19 +116,27 @@
           <button id="redoBtn" class="tool" disabled>重做</button>
           <label class="check"><input id="showNumbers" type="checkbox" checked>显示编号</label>
           <label class="check"><input id="showGrid" type="checkbox" checked>显示网格</label>
+          <label class="check"><input id="showOverview" type="checkbox" checked>显示预览</label>
         </div>
 
-        <div class="editor-canvas-wrap">
-          <div class="grid-coordinate-frame">
-            <div class="coord-corner corner-tl" aria-hidden="true"></div>
-            <div class="coord-axis coord-top" aria-label="上方列坐标"></div>
-            <div class="coord-corner corner-tr" aria-hidden="true"></div>
-            <div class="coord-axis coord-left" aria-label="左侧行坐标"></div>
-            <canvas id="gridCanvas" width="768" height="768" aria-label="24乘24像素编辑网格"></canvas>
-            <div class="coord-axis coord-right" aria-label="右侧行坐标"></div>
-            <div class="coord-corner corner-bl" aria-hidden="true"></div>
-            <div class="coord-axis coord-bottom" aria-label="下方列坐标"></div>
-            <div class="coord-corner corner-br" aria-hidden="true"></div>
+        <div id="editorBoardLayout" class="editor-board-layout">
+          <aside id="overviewCard" class="overview-card" aria-labelledby="overviewTitle">
+            <strong id="overviewTitle">整体预览</strong>
+            <canvas id="overviewCanvas" width="192" height="192" aria-label="当前24乘24像素画的缩小预览"></canvas>
+          </aside>
+
+          <div class="editor-canvas-wrap">
+            <div class="grid-coordinate-frame">
+              <div class="coord-corner corner-tl" aria-hidden="true"></div>
+              <div class="coord-axis coord-top" aria-label="上方列坐标"></div>
+              <div class="coord-corner corner-tr" aria-hidden="true"></div>
+              <div class="coord-axis coord-left" aria-label="左侧行坐标"></div>
+              <canvas id="gridCanvas" width="768" height="768" aria-label="24乘24像素编辑网格"></canvas>
+              <div class="coord-axis coord-right" aria-label="右侧行坐标"></div>
+              <div class="coord-corner corner-bl" aria-hidden="true"></div>
+              <div class="coord-axis coord-bottom" aria-label="下方列坐标"></div>
+              <div class="coord-corner corner-br" aria-hidden="true"></div>
+            </div>
           </div>
         </div>
 

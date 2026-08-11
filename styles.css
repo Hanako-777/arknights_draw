@@ -963,6 +963,48 @@ h1 { font-size: clamp(28px, 3.2vw, 44px); }
   padding: 9px;
 }
 
+.editor-board-layout {
+  display: grid;
+  grid-template-columns: 138px minmax(0, 800px);
+  align-items: start;
+  justify-content: center;
+  gap: 22px;
+  width: 100%;
+}
+
+.editor-board-layout.overview-hidden {
+  grid-template-columns: minmax(0, 800px);
+  gap: 0;
+}
+
+.overview-card {
+  width: 138px;
+  margin-top: 0;
+  padding: 8px;
+  background: #f7f7f7;
+  border: 1px solid #111316;
+  box-shadow: 5px 6px 0 rgba(17, 19, 22, .10);
+}
+
+.overview-card[hidden] { display: none; }
+
+.overview-card strong {
+  display: block;
+  margin-bottom: 7px;
+  color: #303438;
+  font: 900 10px/1.2 "Microsoft YaHei UI", sans-serif;
+  letter-spacing: .08em;
+}
+
+#overviewCanvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: #fff;
+  border: 1px solid #111316;
+  image-rendering: pixelated;
+}
+
 .editor-canvas-wrap::before { display: none; }
 
 .grid-coordinate-frame {
@@ -1116,6 +1158,8 @@ h1 { font-size: clamp(28px, 3.2vw, 44px); }
 @media (max-width: 1180px) {
   .workbench-row { grid-template-columns: minmax(710px, 1fr) minmax(285px, .28fr); }
   .workbench-row .editor-canvas-wrap { width: min(100%, 750px); }
+  .editor-board-layout { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .overview-card { width: 118px; margin: 0; justify-self: center; }
   .coord-axis { font-size: 8px; }
 }
 
@@ -1127,6 +1171,8 @@ h1 { font-size: clamp(28px, 3.2vw, 44px); }
 
 @media (max-width: 680px) {
   .workbench-row .editor-canvas-wrap { width: 100%; padding: 5px; }
+  .overview-card { width: 104px; padding: 6px; }
+  .overview-card strong { margin-bottom: 5px; font-size: 9px; }
   .grid-coordinate-frame {
     grid-template-columns: 22px minmax(0, 1fr) 22px;
     grid-template-rows: 22px minmax(0, 1fr) 22px;
