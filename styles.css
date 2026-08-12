@@ -599,13 +599,17 @@ input[type="range"] {
 .export-grid { gap: 12px; }
 
 .export-card {
+  min-height: 98px;
+  padding: 16px;
+  border-left-width: 6px;
+}
+
+body:not(.mosaic-mode) .export-card {
   display: flex;
   flex-direction: column;
   align-items: stretch;
   justify-content: flex-start;
-  min-height: 98px;
   padding: 27px 16px 16px;
-  border-left-width: 6px;
 }
 
 .export-card:nth-child(1) { border-left-color: var(--cyan); }
