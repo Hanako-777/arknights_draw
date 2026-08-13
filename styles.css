@@ -135,6 +135,33 @@ main { max-width: 1540px; margin: 0 auto; padding: 0 34px 50px; }
 .export-card span { margin-top: 7px; font-size: 11px; }
 .status { margin: 14px 0 0; min-height: 22px; }
 
+.boundary-notice {
+  position: fixed;
+  z-index: 1000;
+  top: 22px;
+  left: 50%;
+  width: min(420px, calc(100vw - 28px));
+  padding: 14px 18px;
+  color: #fff;
+  background: #111316;
+  border: 2px solid #111316;
+  border-left: 7px solid #ff2b91;
+  box-shadow: 7px 7px 0 #18d4d1;
+  transform: translate(-50%, -18px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .18s ease, transform .18s ease;
+}
+.boundary-notice.visible { transform: translate(-50%, 0); opacity: 1; }
+.boundary-notice strong,
+.boundary-notice span { display: block; }
+.boundary-notice strong { font-size: 15px; }
+.boundary-notice span { margin-top: 5px; color: rgba(255, 255, 255, .78); font-size: 12px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .boundary-notice { transition: none; }
+}
+
 footer { padding: 26px; text-align: center; }
 
 @media (max-width: 680px) {

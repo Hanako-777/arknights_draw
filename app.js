@@ -39,7 +39,9 @@
     showSelectionMask: $("showSelectionMask"), showSelectionBorder: $("showSelectionBorder"),
     selectedBadge: $("selectedBadge"), palette: $("palette"), fileName: $("fileName"),
     saveProjectBtn: $("saveProjectBtn"), helpBtn: $("helpBtn"), helpPanel: $("helpPanel"),
-    status: $("status"), exportPreviewBtn: $("exportPreviewBtn"),
+    status: $("status"), boundaryNotice: $("boundaryNotice"),
+    boundaryNoticeTitle: $("boundaryNoticeTitle"), boundaryNoticeText: $("boundaryNoticeText"),
+    exportPreviewBtn: $("exportPreviewBtn"),
     exportTotalBtn: $("exportTotalBtn"), exportHistory: $("exportHistory"),
     historyCount: $("historyCount"), clearHistoryBtn: $("clearHistoryBtn"),
     authorLinks: Array.from(document.querySelectorAll("[data-author-dialog]")), authorDialog: $("authorDialog"),
@@ -74,6 +76,7 @@
   const overviewCtx = el.overviewCanvas.getContext("2d");
   let gridResizeObserver = null;
   let exportHistory = [];
+  let boundaryNoticeTimer = 0;
 
   function hexToRgb(hex) {
     return [parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16)];
@@ -144,6 +147,20 @@
   function setStatus(message, isError = false) {
     el.status.textContent = message;
     el.status.style.color = isError ? "#a52020" : "";
+  }
+
+  function showBoundaryNotice(direction) {
+    window.clearTimeout(boundaryNoticeTimer);
+    el.boundaryNoticeTitle.textContent = `无法向${direction}移动`;
+    el.boundaryNoticeText.textContent = `区块已到达画板${direction}侧边缘，该操作无法执行。`;
+    el.boundaryNotice.hidden = false;
+    el.boundaryNotice.classList.remove("visible");
+    void el.boundaryNotice.offsetWidth;
+    el.boundaryNotice.classList.add("visible");
+    boundaryNoticeTimer = window.setTimeout(() => {
+      el.boundaryNotice.classList.remove("visible");
+      window.setTimeout(() => { el.boundaryNotice.hidden = true; }, 180);
+    }, 2600);
   }
 
   function safeName() {
@@ -714,12 +731,15 @@
   function moveSelection(rowDelta, colDelta) {
     const count = selectionSize();
     if (!count) return;
+    const direction = rowDelta < 0 ? "上" : rowDelta > 0 ? "下" : colDelta < 0 ? "左" : "右";
     for (let index = 0; index < state.selection.length; index++) {
       if (!state.selection[index]) continue;
       const row = Math.floor(index / GRID) + rowDelta;
       const col = index % GRID + colDelta;
       if (row < 0 || row >= GRID || col < 0 || col >= GRID) {
-        setStatus("区块已到达画板边缘，本次移动已取消。", true);
+        const message = `区块已到达画板${direction}侧边缘，无法向${direction}移动。`;
+        setStatus(message, true);
+        showBoundaryNotice(direction);
         return;
       }
     }
@@ -743,7 +763,6 @@
     state.selection = nextSelection;
     endMutation();
     afterSelectionChange(false);
-    const direction = rowDelta < 0 ? "上" : rowDelta > 0 ? "下" : colDelta < 0 ? "左" : "右";
     setStatus(`已将选中的 ${count} 格向${direction}移动一格。`);
   }
 
