@@ -58,7 +58,7 @@
 
 ### 2026-08-11 · 普通模式整体预览窗口
 
-感谢 B 站用户 **@灯语夜阑** 提交的 [PR #1](https://github.com/Hanako-777/arknights_draw/pull/1)。
+感谢 GitHub 用户 @LampTales（B 站：**@灯语夜阑**）提交的 [PR #1](https://github.com/Hanako-777/arknights_draw/pull/1)。
 
 - 在普通模式的主画板左侧新增缩小的整体预览，逐格修改时会同步刷新。
 - 工具栏新增“显示预览”开关，可按需要隐藏或恢复预览窗口。
