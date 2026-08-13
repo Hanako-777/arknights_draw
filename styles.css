@@ -747,7 +747,6 @@ h1 { font-size: clamp(28px, 3.2vw, 44px); }
 .source-panel > .drop-zone {
   width: min(100%, 392px);
   min-height: 0;
-  aspect-ratio: 16 / 9;
   justify-self: center;
 }
 
