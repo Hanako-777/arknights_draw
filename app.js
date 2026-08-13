@@ -152,7 +152,7 @@
   function showBoundaryNotice(direction) {
     window.clearTimeout(boundaryNoticeTimer);
     el.boundaryNoticeTitle.textContent = `无法向${direction}移动`;
-    el.boundaryNoticeText.textContent = `区块已到达画板${direction}侧边缘，该操作无法执行。`;
+    el.boundaryNoticeText.textContent = "区块已到达画板边缘，该操作无法执行。";
     el.boundaryNotice.hidden = false;
     el.boundaryNotice.classList.remove("visible");
     void el.boundaryNotice.offsetWidth;
