@@ -169,7 +169,18 @@
         <label class="name-field">文件名 <input id="fileName" value="arknights_draw" maxlength="40"></label>
       </div>
       <div class="export-grid">
-        <button id="exportPreviewBtn" class="export-card"><strong>PNG 预览</strong><span>24×24最近邻放大，方便查看成品</span></button>
+        <article id="exportPngCard" class="export-card png-export-card">
+          <div class="png-export-title">
+            <button id="exportPreviewBtn" class="png-export-action" type="button"><strong>导出 PNG</strong></button>
+            <button id="pngModeToggle" class="png-mode-toggle" type="button" aria-pressed="false">
+              （<span id="pngModeLabel">放大预览</span><span class="png-mode-icon" aria-hidden="true">⇄</span>）
+            </button>
+          </div>
+          <span id="pngPreviewDescription" class="png-export-description">24×24最近邻放大，方便查看成品</span>
+          <span id="pngRawDescription" class="png-export-description" hidden>
+            24×24原始位图，可导入<a href="https://github.com/JayJokerr/arknights-pixel-autofill" target="_blank" rel="noopener noreferrer">arknights-pixel-autofill</a>自动绘制
+          </span>
+        </article>
         <button id="exportTotalBtn" class="export-card"><strong>导出图纸</strong><span>格内编号＋完整40色图例，并加入历史</span></button>
         <button id="saveProjectBtn" class="export-card"><strong>保存工程 JSON</strong><span>保存格子和设置，方便跨浏览器继续修改</span></button>
       </div>

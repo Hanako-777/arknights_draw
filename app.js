@@ -36,7 +36,9 @@
     editorBoardLayout: $("editorBoardLayout"), replaceFrom: $("replaceFrom"), replaceBtn: $("replaceBtn"),
     selectedBadge: $("selectedBadge"), palette: $("palette"), fileName: $("fileName"),
     saveProjectBtn: $("saveProjectBtn"), helpBtn: $("helpBtn"), helpPanel: $("helpPanel"),
-    status: $("status"), exportPreviewBtn: $("exportPreviewBtn"),
+    status: $("status"), exportPngCard: $("exportPngCard"), exportPreviewBtn: $("exportPreviewBtn"),
+    pngModeToggle: $("pngModeToggle"), pngModeLabel: $("pngModeLabel"),
+    pngPreviewDescription: $("pngPreviewDescription"), pngRawDescription: $("pngRawDescription"),
     exportTotalBtn: $("exportTotalBtn"), exportHistory: $("exportHistory"),
     historyCount: $("historyCount"), clearHistoryBtn: $("clearHistoryBtn"),
     authorLinks: Array.from(document.querySelectorAll("[data-author-dialog]")), authorDialog: $("authorDialog"),
@@ -54,6 +56,7 @@
     grid: new Uint8Array(GRID * GRID).fill(4),
     selected: 1,
     tool: "paint",
+    pngExportMode: "preview",
     painting: false,
     mutationBefore: null,
     undo: [],
@@ -721,6 +724,30 @@
     }, "image/png");
   }
 
+  function syncPngExportMode() {
+    const raw = state.pngExportMode === "raw";
+    el.pngModeLabel.textContent = raw ? "原始位图" : "放大预览";
+    el.pngPreviewDescription.hidden = raw;
+    el.pngRawDescription.hidden = !raw;
+    el.pngModeToggle.setAttribute("aria-pressed", String(raw));
+    el.pngModeToggle.setAttribute("aria-label", raw
+      ? "当前为原始位图，点击切换为放大预览"
+      : "当前为放大预览，点击切换为原始位图");
+    el.exportPreviewBtn.setAttribute("aria-label", raw ? "导出24×24 PNG原始位图" : "导出PNG放大预览");
+  }
+
+  function togglePngExportMode() {
+    state.pngExportMode = state.pngExportMode === "preview" ? "raw" : "preview";
+    syncPngExportMode();
+  }
+
+  function exportPng() {
+    const raw = state.pngExportMode === "raw";
+    const scale = raw ? 1 : 24;
+    const suffix = raw ? "_24x24_PNG原始位图.png" : "_24x24_PNG预览.png";
+    downloadCanvas(createPixelCanvas(scale), `${safeName()}${suffix}`);
+  }
+
   function createProjectData(savedAt = new Date().toISOString()) {
     return {
       format: "arknights_draw-project",
@@ -1084,7 +1111,11 @@
       if (event.target === el.authorDialog) el.authorDialog.close();
     });
     el.saveProjectBtn.addEventListener("click", saveProject);
-    el.exportPreviewBtn.addEventListener("click", () => downloadCanvas(createPixelCanvas(24), `${safeName()}_24x24_PNG预览.png`));
+    el.exportPreviewBtn.addEventListener("click", exportPng);
+    el.pngModeToggle.addEventListener("click", togglePngExportMode);
+    el.exportPngCard.addEventListener("click", event => {
+      if (!event.target.closest("button, a")) exportPng();
+    });
     el.exportTotalBtn.addEventListener("click", exportTotal);
     el.clearHistoryBtn.addEventListener("click", clearExportHistory);
   }
@@ -1097,6 +1128,7 @@
     renderExportHistory();
     bindEvents();
     syncOutputs();
+    syncPngExportMode();
     syncOverviewVisibility();
     drawGrid();
     updatePaletteCounts();
