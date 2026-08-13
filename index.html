@@ -40,8 +40,8 @@
 
   <main>
     <section id="helpPanel" class="help-panel" hidden>
-      <strong>推荐流程：</strong>上传图片 → 拖动/缩放裁剪 → 选择转换方式 → 生成24×24 → 用画笔修正 → 导出图纸。可导入他人成品截图获取图纸。<br>
-      裁剪区可拖动画面，滚轮缩放；网格中左键绘制，按住拖动可连续画。工程文件只保存格子和设置，不包含原图。导出图纸后会自动保存本机历史，点击历史卡片可恢复图纸。
+      <strong>推荐流程：</strong>上传图片 → 拖动/缩放裁剪 → 选择转换方式 → 生成24×24 → 逐格或按区块修正 → 导出图纸。可导入他人成品截图获取图纸。<br>
+      裁剪区可拖动画面，滚轮缩放；网格中左键绘制，按住拖动可连续画。按 1/2/3/4 可切换画笔、填充、取色、区块。区块工具支持画笔选择、相连同色选择和框选，可分别开关选区遮罩和边框；Q 切换选择/取消选择，E 循环切换选择方式，R 使用当前色上色，WASD 或方向键移动。到达画板边缘时会取消整次移动。选择范围本身不进入撤销记录，切换工具后仍会保留，重新生成或载入图纸时清空。工程文件只保存格子和设置，不包含原图。导出图纸后会自动保存本机历史，点击历史卡片可恢复图纸。
     </section>
 
     <section class="source-stage">
@@ -108,15 +108,54 @@
         </div>
 
         <div class="toolbar" role="toolbar" aria-label="绘图工具">
-          <button class="tool active" data-tool="paint" title="画笔">画笔</button>
-          <button class="tool" data-tool="fill" title="填充相邻的同色区域">填充</button>
-          <button class="tool" data-tool="picker" title="从网格取色">取色</button>
+          <button class="tool active" data-tool="paint" title="画笔（快捷键 1）">画笔 <kbd>1</kbd></button>
+          <button class="tool" data-tool="fill" title="填充相邻的同色区域（快捷键 2）">填充 <kbd>2</kbd></button>
+          <button class="tool" data-tool="picker" title="从网格取色（快捷键 3）">取色 <kbd>3</kbd></button>
+          <button class="tool" data-tool="block" title="选择不规则区块并统一上色或移动（快捷键 4）">区块 <kbd>4</kbd></button>
           <span class="toolbar-sep"></span>
           <button id="undoBtn" class="tool" disabled>撤销</button>
           <button id="redoBtn" class="tool" disabled>重做</button>
           <label class="check"><input id="showNumbers" type="checkbox" checked>显示编号</label>
           <label class="check"><input id="showGrid" type="checkbox" checked>显示网格</label>
           <label class="check"><input id="showOverview" type="checkbox" checked>显示预览</label>
+        </div>
+
+        <div id="blockToolbar" class="block-toolbar" role="toolbar" aria-label="区块工具" hidden>
+          <div class="block-tool-group">
+            <span class="block-tool-label">范围</span>
+            <button id="selectAllBtn" class="tool" type="button">全选</button>
+            <button id="clearSelectionBtn" class="tool" type="button">取消全部</button>
+            <span id="selectionCount" class="selection-count">已选 0 格</span>
+          </div>
+          <div class="block-tool-group" role="group" aria-label="选择或取消选择">
+            <span class="block-tool-label">操作</span>
+            <button class="tool active" type="button" data-selection-operation="add" aria-pressed="true">选择</button>
+            <button class="tool" type="button" data-selection-operation="subtract" aria-pressed="false">取消选择</button>
+            <span class="shortcut-hint"><kbd>Q</kbd> 切换</span>
+          </div>
+          <div class="block-tool-group" role="group" aria-label="区块选择方式">
+            <span class="block-tool-label">方式</span>
+            <button class="tool active" type="button" data-selection-method="brush" aria-pressed="true">画笔选择</button>
+            <button class="tool" type="button" data-selection-method="fill" aria-pressed="false">同色区域</button>
+            <button class="tool" type="button" data-selection-method="rect" aria-pressed="false">框选</button>
+            <span class="shortcut-hint"><kbd>E</kbd> 切换</span>
+          </div>
+          <div class="block-tool-group" role="group" aria-label="选区显示设置">
+            <span class="block-tool-label">显示</span>
+            <label class="check block-check"><input id="showSelectionMask" type="checkbox" checked>显示遮罩</label>
+            <label class="check block-check"><input id="showSelectionBorder" type="checkbox" checked>显示边框</label>
+          </div>
+          <div class="block-tool-group block-actions">
+            <span class="block-tool-label">处理</span>
+            <button id="colorSelectionBtn" class="button secondary" type="button" title="使用当前色上色（快捷键 R）" disabled>使用当前色上色 <kbd>R</kbd></button>
+            <span class="move-buttons" role="group" aria-label="移动选中区块">
+              <button class="tool move-button" type="button" data-move-row="-1" data-move-col="0" title="向上移动一格（W 或 ↑）" disabled>↑</button>
+              <button class="tool move-button" type="button" data-move-row="1" data-move-col="0" title="向下移动一格（S 或 ↓）" disabled>↓</button>
+              <button class="tool move-button" type="button" data-move-row="0" data-move-col="-1" title="向左移动一格（A 或 ←）" disabled>←</button>
+              <button class="tool move-button" type="button" data-move-row="0" data-move-col="1" title="向右移动一格（D 或 →）" disabled>→</button>
+            </span>
+            <span class="shortcut-hint"><kbd>WASD</kbd> / 方向键</span>
+          </div>
         </div>
 
         <div id="editorBoardLayout" class="editor-board-layout">

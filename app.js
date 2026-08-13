@@ -34,6 +34,9 @@
     undoBtn: $("undoBtn"), redoBtn: $("redoBtn"), showNumbers: $("showNumbers"),
     showGrid: $("showGrid"), showOverview: $("showOverview"), overviewCard: $("overviewCard"),
     editorBoardLayout: $("editorBoardLayout"), replaceFrom: $("replaceFrom"), replaceBtn: $("replaceBtn"),
+    blockToolbar: $("blockToolbar"), selectAllBtn: $("selectAllBtn"), clearSelectionBtn: $("clearSelectionBtn"),
+    selectionCount: $("selectionCount"), colorSelectionBtn: $("colorSelectionBtn"),
+    showSelectionMask: $("showSelectionMask"), showSelectionBorder: $("showSelectionBorder"),
     selectedBadge: $("selectedBadge"), palette: $("palette"), fileName: $("fileName"),
     saveProjectBtn: $("saveProjectBtn"), helpBtn: $("helpBtn"), helpPanel: $("helpPanel"),
     status: $("status"), exportPreviewBtn: $("exportPreviewBtn"),
@@ -55,7 +58,13 @@
     selected: 1,
     tool: "paint",
     painting: false,
+    selection: new Uint8Array(GRID * GRID),
+    selectionOperation: "add",
+    selectionMethod: "brush",
+    selectionDrag: null,
+    selectionLastCell: null,
     mutationBefore: null,
+    mutationSelectionBefore: null,
     undo: [],
     redo: []
   };
@@ -394,7 +403,51 @@
       gridCtx.lineWidth = Math.max(1, backingScale);
       gridCtx.stroke();
     }
+    if (state.tool === "block") drawSelection(cell, backingScale);
     drawOverview();
+  }
+
+  function drawSelection(cell, backingScale) {
+    gridCtx.save();
+    if (el.showSelectionMask.checked) {
+      gridCtx.fillStyle = "rgba(24, 212, 209, .25)";
+      for (let index = 0; index < state.selection.length; index++) {
+        if (!state.selection[index]) continue;
+        const row = Math.floor(index / GRID), col = index % GRID;
+        gridCtx.fillRect(col * cell, row * cell, cell, cell);
+      }
+    }
+
+    if (el.showSelectionBorder.checked) {
+      gridCtx.beginPath();
+      for (let index = 0; index < state.selection.length; index++) {
+        if (!state.selection[index]) continue;
+        const row = Math.floor(index / GRID), col = index % GRID;
+        const x = col * cell, y = row * cell;
+        if (row === 0 || !state.selection[index - GRID]) { gridCtx.moveTo(x, y); gridCtx.lineTo(x + cell, y); }
+        if (row === GRID - 1 || !state.selection[index + GRID]) { gridCtx.moveTo(x, y + cell); gridCtx.lineTo(x + cell, y + cell); }
+        if (col === 0 || !state.selection[index - 1]) { gridCtx.moveTo(x, y); gridCtx.lineTo(x, y + cell); }
+        if (col === GRID - 1 || !state.selection[index + 1]) { gridCtx.moveTo(x + cell, y); gridCtx.lineTo(x + cell, y + cell); }
+      }
+      gridCtx.strokeStyle = "#ff2b91";
+      gridCtx.lineWidth = Math.max(2, backingScale * 2);
+      gridCtx.lineJoin = "miter";
+      gridCtx.stroke();
+    }
+
+    if (state.selectionDrag?.method === "rect") {
+      const { start, current } = state.selectionDrag;
+      const left = Math.min(start.col, current.col) * cell;
+      const top = Math.min(start.row, current.row) * cell;
+      const width = (Math.abs(start.col - current.col) + 1) * cell;
+      const height = (Math.abs(start.row - current.row) + 1) * cell;
+      gridCtx.setLineDash([Math.max(5, cell * .2), Math.max(3, cell * .12)]);
+      gridCtx.strokeStyle = state.selectionOperation === "add" ? "#050505" : "#ffffff";
+      gridCtx.lineWidth = Math.max(2, backingScale * 2);
+      gridCtx.strokeRect(left + gridCtx.lineWidth / 2, top + gridCtx.lineWidth / 2,
+        Math.max(0, width - gridCtx.lineWidth), Math.max(0, height - gridCtx.lineWidth));
+    }
+    gridCtx.restore();
   }
 
   function drawOverview() {
@@ -430,8 +483,113 @@
     return { row, col, index: row * GRID + col };
   }
 
-  function beginMutation() {
-    if (!state.mutationBefore) state.mutationBefore = state.grid.slice();
+  function selectionValue() {
+    return state.selectionOperation === "add" ? 1 : 0;
+  }
+
+  function selectionSize() {
+    let count = 0;
+    state.selection.forEach(value => { if (value) count++; });
+    return count;
+  }
+
+  function afterSelectionChange(redraw = true) {
+    const count = selectionSize();
+    el.selectionCount.textContent = `已选 ${count} 格`;
+    el.clearSelectionBtn.disabled = count === 0;
+    el.colorSelectionBtn.disabled = count === 0;
+    document.querySelectorAll(".move-button").forEach(button => { button.disabled = count === 0; });
+    if (redraw) drawGrid();
+  }
+
+  function clearSelection(redraw = true) {
+    state.selection.fill(0);
+    state.selectionDrag = null;
+    state.selectionLastCell = null;
+    afterSelectionChange(redraw);
+  }
+
+  function setSelectionOperation(operation) {
+    state.selectionOperation = operation === "subtract" ? "subtract" : "add";
+    document.querySelectorAll("[data-selection-operation]").forEach(button => {
+      const active = button.dataset.selectionOperation === state.selectionOperation;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-pressed", String(active));
+    });
+    drawGrid();
+  }
+
+  function setSelectionMethod(method) {
+    state.selectionMethod = ["brush", "fill", "rect"].includes(method) ? method : "brush";
+    state.selectionDrag = null;
+    state.selectionLastCell = null;
+    document.querySelectorAll("[data-selection-method]").forEach(button => {
+      const active = button.dataset.selectionMethod === state.selectionMethod;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-pressed", String(active));
+    });
+    drawGrid();
+  }
+
+  function applySelectionCell(cell) {
+    if (!cell) return false;
+    const value = selectionValue();
+    if (state.selection[cell.index] === value) return false;
+    state.selection[cell.index] = value;
+    return true;
+  }
+
+  function applySelectionLine(from, to) {
+    if (!from || !to) return;
+    let x0 = from.col, y0 = from.row;
+    const x1 = to.col, y1 = to.row;
+    const dx = Math.abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
+    const dy = -Math.abs(y1 - y0), sy = y0 < y1 ? 1 : -1;
+    let error = dx + dy;
+    while (true) {
+      applySelectionCell({ row: y0, col: x0, index: y0 * GRID + x0 });
+      if (x0 === x1 && y0 === y1) break;
+      const twice = 2 * error;
+      if (twice >= dy) { error += dy; x0 += sx; }
+      if (twice <= dx) { error += dx; y0 += sy; }
+    }
+    afterSelectionChange();
+  }
+
+  function selectConnectedRegion(startIndex) {
+    const color = state.grid[startIndex];
+    const value = selectionValue();
+    const stack = [startIndex];
+    const seen = new Uint8Array(GRID * GRID);
+    while (stack.length) {
+      const index = stack.pop();
+      if (seen[index] || state.grid[index] !== color) continue;
+      seen[index] = 1;
+      state.selection[index] = value;
+      const row = Math.floor(index / GRID), col = index % GRID;
+      if (row > 0) stack.push(index - GRID);
+      if (row < GRID - 1) stack.push(index + GRID);
+      if (col > 0) stack.push(index - 1);
+      if (col < GRID - 1) stack.push(index + 1);
+    }
+    afterSelectionChange();
+  }
+
+  function applyRectangleSelection(start, end) {
+    const top = Math.min(start.row, end.row), bottom = Math.max(start.row, end.row);
+    const left = Math.min(start.col, end.col), right = Math.max(start.col, end.col);
+    const value = selectionValue();
+    for (let row = top; row <= bottom; row++) {
+      for (let col = left; col <= right; col++) state.selection[row * GRID + col] = value;
+    }
+    afterSelectionChange();
+  }
+
+  function beginMutation(trackSelection = false) {
+    if (!state.mutationBefore) {
+      state.mutationBefore = state.grid.slice();
+      state.mutationSelectionBefore = trackSelection ? state.selection.slice() : null;
+    }
   }
 
   function endMutation() {
@@ -441,16 +599,18 @@
       if (state.grid[i] !== state.mutationBefore[i]) { changed = true; break; }
     }
     if (changed) {
-      state.undo.push(state.mutationBefore);
+      state.undo.push({ grid: state.mutationBefore, selection: state.mutationSelectionBefore });
       if (state.undo.length > 80) state.undo.shift();
       state.redo = [];
       afterGridChange();
     }
     state.mutationBefore = null;
+    state.mutationSelectionBefore = null;
   }
 
   function commitGrid(next) {
-    state.undo.push(state.grid.slice());
+    clearSelection(false);
+    state.undo.push({ grid: state.grid.slice(), selection: null });
     if (state.undo.length > 80) state.undo.shift();
     state.grid = new Uint8Array(next);
     state.redo = [];
@@ -471,16 +631,26 @@
 
   function undo() {
     if (!state.undo.length) return;
-    state.redo.push(state.grid.slice());
-    state.grid = state.undo.pop();
+    const entry = state.undo.pop();
+    state.redo.push({ grid: state.grid.slice(), selection: entry.selection ? state.selection.slice() : null });
+    state.grid = entry.grid;
+    if (entry.selection) {
+      state.selection = entry.selection;
+      afterSelectionChange(false);
+    }
     afterGridChange();
     setStatus("已撤销上一步。 ");
   }
 
   function redo() {
     if (!state.redo.length) return;
-    state.undo.push(state.grid.slice());
-    state.grid = state.redo.pop();
+    const entry = state.redo.pop();
+    state.undo.push({ grid: state.grid.slice(), selection: entry.selection ? state.selection.slice() : null });
+    state.grid = entry.grid;
+    if (entry.selection) {
+      state.selection = entry.selection;
+      afterSelectionChange(false);
+    }
     afterGridChange();
     setStatus("已恢复上一步。 ");
   }
@@ -511,8 +681,70 @@
   }
 
   function setTool(tool) {
+    if (state.painting) {
+      state.painting = false;
+      endMutation();
+    }
     state.tool = tool;
+    state.selectionDrag = null;
+    state.selectionLastCell = null;
     document.querySelectorAll(".tool[data-tool]").forEach(button => button.classList.toggle("active", button.dataset.tool === tool));
+    el.blockToolbar.hidden = tool !== "block";
+    el.gridCanvas.classList.toggle("block-mode", tool === "block");
+    drawGrid();
+  }
+
+  function colorSelection() {
+    const count = selectionSize();
+    if (!count) return;
+    beginMutation();
+    let changed = 0;
+    for (let index = 0; index < state.grid.length; index++) {
+      if (state.selection[index] && state.grid[index] !== state.selected) {
+        state.grid[index] = state.selected;
+        changed++;
+      }
+    }
+    endMutation();
+    setStatus(changed
+      ? `已将选中的 ${count} 格统一上色为 ${String(state.selected).padStart(2, "0")}。`
+      : `选中的 ${count} 格已经是当前颜色。`);
+  }
+
+  function moveSelection(rowDelta, colDelta) {
+    const count = selectionSize();
+    if (!count) return;
+    for (let index = 0; index < state.selection.length; index++) {
+      if (!state.selection[index]) continue;
+      const row = Math.floor(index / GRID) + rowDelta;
+      const col = index % GRID + colDelta;
+      if (row < 0 || row >= GRID || col < 0 || col >= GRID) {
+        setStatus("区块已到达画板边缘，本次移动已取消。", true);
+        return;
+      }
+    }
+
+    beginMutation(true);
+    const before = state.grid.slice();
+    const nextGrid = state.grid.slice();
+    const nextSelection = new Uint8Array(GRID * GRID);
+    for (let index = 0; index < state.selection.length; index++) {
+      if (state.selection[index]) nextGrid[index] = 4;
+    }
+    for (let index = 0; index < state.selection.length; index++) {
+      if (!state.selection[index]) continue;
+      const row = Math.floor(index / GRID) + rowDelta;
+      const col = index % GRID + colDelta;
+      const destination = row * GRID + col;
+      nextGrid[destination] = before[index];
+      nextSelection[destination] = 1;
+    }
+    state.grid = nextGrid;
+    state.selection = nextSelection;
+    endMutation();
+    afterSelectionChange(false);
+    const direction = rowDelta < 0 ? "上" : rowDelta > 0 ? "下" : colDelta < 0 ? "左" : "右";
+    setStatus(`已将选中的 ${count} 格向${direction}移动一格。`);
   }
 
   function replaceColor() {
@@ -1021,11 +1253,21 @@
     el.generateBtn.addEventListener("click", buildGridFromImage);
 
     document.querySelectorAll(".tool[data-tool]").forEach(button => button.addEventListener("click", () => setTool(button.dataset.tool)));
+    document.querySelectorAll("[data-selection-operation]").forEach(button => button.addEventListener("click", () => setSelectionOperation(button.dataset.selectionOperation)));
+    document.querySelectorAll("[data-selection-method]").forEach(button => button.addEventListener("click", () => setSelectionMethod(button.dataset.selectionMethod)));
+    el.selectAllBtn.addEventListener("click", () => { state.selection.fill(1); afterSelectionChange(); });
+    el.clearSelectionBtn.addEventListener("click", () => clearSelection());
+    el.colorSelectionBtn.addEventListener("click", colorSelection);
+    document.querySelectorAll(".move-button").forEach(button => button.addEventListener("click", () => {
+      moveSelection(Number(button.dataset.moveRow), Number(button.dataset.moveCol));
+    }));
     el.undoBtn.addEventListener("click", undo);
     el.redoBtn.addEventListener("click", redo);
     el.showNumbers.addEventListener("change", drawGrid);
     el.showGrid.addEventListener("change", drawGrid);
     el.showOverview.addEventListener("change", syncOverviewVisibility);
+    el.showSelectionMask.addEventListener("change", drawGrid);
+    el.showSelectionBorder.addEventListener("change", drawGrid);
     el.replaceBtn.addEventListener("click", replaceColor);
 
     el.gridCanvas.addEventListener("pointerdown", event => {
@@ -1035,6 +1277,20 @@
       if (event.button === 2 || state.tool === "picker") {
         selectColor(state.grid[cell.index]);
         setStatus(`已从 R${cell.row + 1} C${cell.col + 1} 取得颜色 ${String(state.selected).padStart(2, "0")}。`);
+        return;
+      }
+      if (state.tool === "block") {
+        if (state.selectionMethod === "fill") {
+          selectConnectedRegion(cell.index);
+        } else if (state.selectionMethod === "rect") {
+          state.selectionDrag = { method: "rect", start: cell, current: cell };
+          drawGrid();
+        } else {
+          state.selectionDrag = { method: "brush" };
+          state.selectionLastCell = cell;
+          applySelectionCell(cell);
+          afterSelectionChange();
+        }
         return;
       }
       beginMutation();
@@ -1049,10 +1305,29 @@
     el.gridCanvas.addEventListener("pointermove", event => {
       const cell = cellFromEvent(event);
       if (cell) el.cellInfo.textContent = `R${cell.row + 1} C${cell.col + 1} · ${String(state.grid[cell.index]).padStart(2, "0")}`;
+      if (state.tool === "block" && state.selectionDrag && cell) {
+        if (state.selectionDrag.method === "rect") {
+          state.selectionDrag.current = cell;
+          drawGrid();
+        } else if (state.selectionDrag.method === "brush" && (!state.selectionLastCell || cell.index !== state.selectionLastCell.index)) {
+          applySelectionLine(state.selectionLastCell, cell);
+          state.selectionLastCell = cell;
+        }
+      }
       if (state.painting && state.tool === "paint") paintCell(cell);
     });
-    el.gridCanvas.addEventListener("pointerleave", () => { if (!state.painting) el.cellInfo.textContent = "R— C—"; });
-    const stopPainting = () => { if (state.painting) { state.painting = false; endMutation(); } };
+    el.gridCanvas.addEventListener("pointerleave", () => { if (!state.painting && !state.selectionDrag) el.cellInfo.textContent = "R— C—"; });
+    const stopPainting = event => {
+      if (state.painting) { state.painting = false; endMutation(); }
+      if (state.selectionDrag) {
+        const drag = state.selectionDrag;
+        const end = cellFromEvent(event) || drag.current || state.selectionLastCell;
+        state.selectionDrag = null;
+        state.selectionLastCell = null;
+        if (drag.method === "rect" && end) applyRectangleSelection(drag.start, end);
+        else drawGrid();
+      }
+    };
     el.gridCanvas.addEventListener("pointerup", stopPainting);
     el.gridCanvas.addEventListener("pointercancel", stopPainting);
     window.addEventListener("pointerup", stopPainting);
@@ -1060,12 +1335,45 @@
 
     document.addEventListener("keydown", event => {
       const tag = document.activeElement?.tagName;
-      if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
+      if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA" || document.activeElement?.isContentEditable) return;
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") { event.preventDefault(); event.shiftKey ? redo() : undo(); }
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "y") { event.preventDefault(); redo(); }
-      if (event.key.toLowerCase() === "b") setTool("paint");
-      if (event.key.toLowerCase() === "f") setTool("fill");
-      if (event.key.toLowerCase() === "i") setTool("picker");
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+
+      const key = event.key.toLowerCase();
+      const toolShortcuts = { "1": "paint", "2": "fill", "3": "picker", "4": "block" };
+      if (toolShortcuts[key]) {
+        event.preventDefault();
+        if (event.repeat) return;
+        setTool(toolShortcuts[key]);
+        return;
+      }
+      if (state.tool !== "block") return;
+      if (key === "q") {
+        event.preventDefault();
+        if (event.repeat) return;
+        setSelectionOperation(state.selectionOperation === "add" ? "subtract" : "add");
+      } else if (key === "e") {
+        event.preventDefault();
+        if (event.repeat) return;
+        const methods = ["brush", "fill", "rect"];
+        setSelectionMethod(methods[(methods.indexOf(state.selectionMethod) + 1) % methods.length]);
+      } else if (key === "r") {
+        event.preventDefault();
+        if (event.repeat) return;
+        colorSelection();
+      } else {
+        const moves = {
+          w: [-1, 0], arrowup: [-1, 0],
+          s: [1, 0], arrowdown: [1, 0],
+          a: [0, -1], arrowleft: [0, -1],
+          d: [0, 1], arrowright: [0, 1]
+        };
+        if (moves[key]) {
+          event.preventDefault();
+          moveSelection(...moves[key]);
+        }
+      }
     });
 
     el.fileName.addEventListener("change", saveLocal);
@@ -1101,6 +1409,7 @@
     drawGrid();
     updatePaletteCounts();
     updateHistoryButtons();
+    afterSelectionChange(false);
     if ("ResizeObserver" in window) {
       gridResizeObserver = new ResizeObserver(syncGridCanvasResolution);
       gridResizeObserver.observe(el.gridCanvas);
