@@ -1670,7 +1670,7 @@
           nudgeMoveSession(...moves[key], true);
           return;
         }
-        if (toolShortcuts[key] || key === "q" || key === "e" || key === "r") {
+        if (toolShortcuts[key] || key === "q" || key === "e" || key === "r" || key === "x") {
           finishMoveSession({ silent: true });
         } else {
           return;
@@ -1687,6 +1687,10 @@
       if (key === "f") {
         event.preventDefault();
         if (!event.repeat) startMoveSession();
+      } else if (key === "x") {
+        event.preventDefault();
+        if (event.repeat) return;
+        clearSelection();
       } else if (key === "q") {
         event.preventDefault();
         if (event.repeat) return;

@@ -177,6 +177,7 @@ footer { padding: 26px; text-align: center; }
   .name-field { flex-direction: column; align-items: flex-start; }
   .block-tool-group + .block-tool-group { padding-left: 0; border-left: 0; }
   .block-actions { width: 100%; margin-left: 0; }
+  .toolbar kbd, .block-toolbar kbd, .block-toolbar .shortcut-hint { display: none; }
 }
 
 @media (max-width: 420px) {
