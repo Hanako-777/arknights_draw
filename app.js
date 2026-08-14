@@ -42,7 +42,7 @@
     cellInfo: $("cellInfo"),
     undoBtn: $("undoBtn"), redoBtn: $("redoBtn"), showNumbers: $("showNumbers"),
     showGrid: $("showGrid"), showOverview: $("showOverview"), overviewCard: $("overviewCard"),
-    editorBoardLayout: $("editorBoardLayout"), replaceFrom: $("replaceFrom"), replaceBtn: $("replaceBtn"),
+    editorBoardLayout: $("editorBoardLayout"),
     blockToolbar: $("blockToolbar"), selectAllBtn: $("selectAllBtn"), clearSelectionBtn: $("clearSelectionBtn"),
     selectionCount: $("selectionCount"), colorSelectionBtn: $("colorSelectionBtn"),
     showSelectionMask: $("showSelectionMask"), showSelectionBorder: $("showSelectionBorder"),
@@ -196,7 +196,6 @@
 
   function renderPalette() {
     el.palette.replaceChildren();
-    el.replaceFrom.replaceChildren();
     PALETTE.forEach((hex, index) => {
       const id = index + 1;
       const button = document.createElement("button");
@@ -220,11 +219,6 @@
       button.append(colorBlock, info);
       button.addEventListener("click", () => selectColor(id));
       el.palette.append(button);
-
-      const option = document.createElement("option");
-      option.value = String(id);
-      option.textContent = `${String(id).padStart(2, "0")} ${hex}`;
-      el.replaceFrom.append(option);
     });
     selectColor(state.selected);
   }
@@ -651,7 +645,7 @@
 
   function setSelectionMethod(method) {
     if (state.moveSession) finishMoveSession({ silent: true });
-    state.selectionMethod = ["brush", "fill", "rect"].includes(method) ? method : "brush";
+    state.selectionMethod = ["brush", "fill", "color", "rect"].includes(method) ? method : "brush";
     state.selectionDrag = null;
     state.selectionLastCell = null;
     document.querySelectorAll("[data-selection-method]").forEach(button => {
@@ -702,6 +696,15 @@
       if (row < GRID - 1) stack.push(index + GRID);
       if (col > 0) stack.push(index - 1);
       if (col < GRID - 1) stack.push(index + 1);
+    }
+    afterSelectionChange();
+  }
+
+  function selectSameColor(startIndex) {
+    const color = state.grid[startIndex];
+    const value = selectionValue();
+    for (let index = 0; index < state.grid.length; index++) {
+      if (state.grid[index] === color) state.selection[index] = value;
     }
     afterSelectionChange();
   }
@@ -944,21 +947,6 @@
     syncMoveControls();
     afterSelectionChange();
     setStatus("已取消此次区块移动。 ");
-  }
-
-  function replaceColor() {
-    const from = Number(el.replaceFrom.value);
-    if (from === state.selected) {
-      setStatus("来源色和当前色相同，不需要替换。", true);
-      return;
-    }
-    beginMutation();
-    let count = 0;
-    for (let i = 0; i < state.grid.length; i++) {
-      if (state.grid[i] === from) { state.grid[i] = state.selected; count++; }
-    }
-    endMutation();
-    setStatus(count ? `已将 ${String(from).padStart(2, "0")} 的 ${count} 格替换为 ${String(state.selected).padStart(2, "0")}。` : "网格中没有这种来源色。 ");
   }
 
   function createPixelCanvas(scale = 1) {
@@ -1544,8 +1532,6 @@
     el.showOverview.addEventListener("change", syncOverviewVisibility);
     el.showSelectionMask.addEventListener("change", drawGrid);
     el.showSelectionBorder.addEventListener("change", drawGrid);
-    el.replaceBtn.addEventListener("click", replaceColor);
-
     el.gridCanvas.addEventListener("pointerdown", event => {
       const cell = cellFromEvent(event);
       if (!cell) return;
@@ -1572,6 +1558,8 @@
         }
         if (state.selectionMethod === "fill") {
           selectConnectedRegion(cell.index);
+        } else if (state.selectionMethod === "color") {
+          selectSameColor(cell.index);
         } else if (state.selectionMethod === "rect") {
           state.selectionDrag = { method: "rect", start: cell, current: cell };
           drawGrid();
@@ -1706,7 +1694,7 @@
       } else if (key === "e") {
         event.preventDefault();
         if (event.repeat) return;
-        const methods = ["brush", "fill", "rect"];
+        const methods = ["brush", "fill", "color", "rect"];
         setSelectionMethod(methods[(methods.indexOf(state.selectionMethod) + 1) % methods.length]);
       } else if (key === "r") {
         event.preventDefault();

@@ -116,8 +116,7 @@ main { max-width: 1540px; margin: 0 auto; padding: 0 34px 50px; }
 
 .editor-canvas-wrap { margin: 0 auto; }
 #gridCanvas { display: block; width: 100%; height: auto; cursor: crosshair; touch-action: none; image-rendering: pixelated; }
-.replace-row { margin-top: 12px; display: flex; align-items: center; flex-wrap: wrap; gap: 9px; font-size: 12px; }
-.replace-row select { min-height: 34px; padding: 5px 8px; }
+.selected-color-row { margin-top: 12px; display: flex; align-items: center; justify-content: flex-end; font-size: 12px; }
 .selected-badge { margin-left: auto; padding: 7px 10px; color: #fff; background: #222; font-weight: 800; }
 
 .palette { display: grid; }
@@ -567,7 +566,7 @@ input[type="range"] {
   accent-color: var(--cyan);
 }
 
-.control select, .name-field input, .replace-row select {
+.control select, .name-field input {
   border: 1.5px solid var(--black);
   border-radius: 0;
   background: rgba(255,255,255,.96);
@@ -619,7 +618,7 @@ input[type="range"] {
 
 #gridCanvas { background: #fff; }
 
-.replace-row {
+.selected-color-row {
   padding-top: 12px;
   border-top: 1px solid #c4c6ca;
   color: #61656a;

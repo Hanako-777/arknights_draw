@@ -41,7 +41,7 @@
   <main>
     <section id="helpPanel" class="help-panel" hidden>
       <strong>推荐流程：</strong>上传图片 → 拖动/缩放裁剪 → 选择转换方式 → 生成24×24 → 逐格或按区块修正 → 导出图纸。可导入他人成品截图获取图纸。<br>
-      裁剪区可拖动画面，滚轮缩放；网格中左键绘制，按住拖动可连续画。按 1/2/3/4 可切换画笔、填充、取色、区块。区块工具支持画笔选择、相连同色选择和框选，可分别开关选区遮罩和边框；Q 切换选择/取消选择，E 循环切换选择方式，R 使用当前色上色。按 F 进入移动模式后，可在画板上拖动区块或用 WASD/方向键调整，F 完成、G 取消；切换其他操作会自动完成当前移动。选择范围本身不进入撤销记录，切换工具后仍会保留，重新生成或载入图纸时清空。工程文件只保存格子和设置，不包含原图。导出图纸后会自动保存本机历史，点击历史卡片可恢复图纸。
+      裁剪区可拖动画面，滚轮缩放；网格中左键绘制，按住拖动可连续画。按 1/2/3/4 可切换画笔、填充、取色、区块。区块工具支持画笔选择、相连同色、全图同色和框选，可分别开关选区遮罩和边框；Q 切换选择/取消选择，E 循环切换选择方式，R 使用当前色上色。按 F 进入移动模式后，可在画板上拖动区块或用 WASD/方向键调整，F 完成、G 取消；切换其他操作会自动完成当前移动。选择范围本身不进入撤销记录，切换工具后仍会保留，重新生成或载入图纸时清空。工程文件只保存格子和设置，不包含原图。导出图纸后会自动保存本机历史，点击历史卡片可恢复图纸。
     </section>
 
     <section class="source-stage">
@@ -156,7 +156,8 @@
           <div class="block-tool-group" role="group" aria-label="区块选择方式">
             <span class="block-tool-label">方式</span>
             <button class="tool active" type="button" data-selection-method="brush" aria-pressed="true">画笔选择</button>
-            <button class="tool" type="button" data-selection-method="fill" aria-pressed="false">同色区域</button>
+            <button class="tool" type="button" data-selection-method="fill" aria-pressed="false" title="选择与点击处相连的同色像素">相连同色</button>
+            <button class="tool" type="button" data-selection-method="color" aria-pressed="false" title="选择画板中所有同色像素">全图同色</button>
             <button class="tool" type="button" data-selection-method="rect" aria-pressed="false">框选</button>
             <span class="shortcut-hint"><kbd>E</kbd> 切换</span>
           </div>
@@ -200,10 +201,7 @@
           </div>
         </div>
 
-        <div class="replace-row">
-          <label>把 <select id="replaceFrom"></select></label>
-          <span>全部替换为当前色</span>
-          <button id="replaceBtn" class="button secondary">执行替换</button>
+        <div class="selected-color-row">
           <span id="selectedBadge" class="selected-badge">当前色 01</span>
         </div>
       </article>
