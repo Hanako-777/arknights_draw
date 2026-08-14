@@ -105,9 +105,14 @@ main { max-width: 1540px; margin: 0 auto; padding: 0 34px 50px; }
 .block-check { margin-left: 0; }
 .block-actions { margin-left: auto; }
 .block-actions .button { min-height: 36px; }
-.move-buttons { display: inline-flex; gap: 4px; }
-.move-button { min-width: 36px; padding-left: 8px; padding-right: 8px; font-size: 17px; }
+.move-controls { display: inline-flex; gap: 6px; width: 170px; }
+.move-controls .button { min-width: 0; min-height: 36px; }
+#moveStartBtn { flex: 1; }
+#moveActiveControls .button { flex: 1 1 0; padding-inline: 10px; }
+#moveConfirmBtn.button.primary::after { content: none; }
 #gridCanvas.block-mode { cursor: cell; }
+#gridCanvas.block-mode.move-mode { cursor: grab; }
+#gridCanvas.block-mode.move-dragging { cursor: grabbing; }
 
 .editor-canvas-wrap { margin: 0 auto; }
 #gridCanvas { display: block; width: 100%; height: auto; cursor: crosshair; touch-action: none; image-rendering: pixelated; }
